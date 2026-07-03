@@ -7,6 +7,7 @@ Personal helper tools for working with AI: Cursor skills and MCP servers.
 | Path | Contents |
 |------|----------|
 | `skills/` | Cursor agent skills |
+| `tools/` | Installable CLI helpers (`pip install -e tools`; see [tools/README.md](tools/README.md)) |
 | `mcp/` | MCP server packages (CLI + stdio servers for Cursor and other clients) |
 
 Each MCP package has its own `README.md` with install steps and Cursor `mcp.json` examples.
@@ -44,6 +45,20 @@ CLI and MCP server for daily agenda workspace activity: repos touched on the las
 - MCP tools: `worklog_workspace_activity`, `worklog_workspace_today`, `worklog_last_workday`
 - See [mcp/dir-worklog/README.md](mcp/dir-worklog/README.md)
 
+## CLI tools
+
+Install all commands from the tools package:
+
+```bash
+pip install -e /path/to/ai-tools/tools
+```
+
+| Command | Purpose |
+|---------|---------|
+| `clean-twd` | Clean IdM-CI `twd` artifacts before test re-execution |
+
+See [tools/README.md](tools/README.md).
+
 ## Cursor skills
 
 | Skill | Purpose |
@@ -52,6 +67,7 @@ CLI and MCP server for daily agenda workspace activity: repos touched on the las
 | `jira-cli-mcp` | Jira issue search, updates, and transitions via the jira-cli MCP |
 | `review-changes` | Clone a PR/MR, lint changed files, and review diff quality |
 | `run-python-static-code-analysis` | Lint and format Python edits using project-configured tools |
+| `run-sssd-tests-idmci` | IdM-CI / @TESTRUNS multihost tests (`~/git/@TESTRUNS`, `twd/metadata.yaml`, `te`); pytest-mh and in-repo pytest |
 | `write-sssd-system-tests` | Author SSSD multihost system tests with sssd-test-framework / pytest-mh |
 
 Skills live under `skills/<name>/SKILL.md`. Cursor loads them from `~/git/.cursor/skills`, which symlinks here.

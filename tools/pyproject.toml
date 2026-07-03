@@ -1,0 +1,17 @@
+[project]
+name = "ai-tools"
+version = "0.1.0"
+description = "CLI helpers from the ai-tools repository"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.scripts]
+clean-twd = "ai_tools.clean_twd:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ai_tools*"]
