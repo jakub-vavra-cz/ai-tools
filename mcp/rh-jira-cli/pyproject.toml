@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jira-cli"
+version = "0.1.0"
+description = "CLI for Jira: list assignee/QA issues, edit story points, sprint, comments, transitions"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+]
+dependencies = [
+    "requests>=2.28.0",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.1.0"]
+mcp = ["mcp>=1.0"]
+
+[project.scripts]
+jira-cli = "jira_cli.cli:main"
+jira-cli-mcp = "jira_cli.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["jira_cli*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

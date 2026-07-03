@@ -1,0 +1,73 @@
+{
+  "name": "worklog_workspace_activity",
+  "description": "Last workday git workspace activity: repos touched that day, notable files, and your git commits. Same as `worklog activity`. Pass one or more workspace roots.",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "workspaces": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": [],
+        "title": "Workspaces",
+        "description": "One or more workspace roots. Empty: GIT_PATH or ~/git."
+      },
+      "workday": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Workday",
+        "description": "ISO date (YYYY-MM-DD). Default: previous Mon–Fri workday."
+      },
+      "max_repos": {
+        "default": 8,
+        "minimum": 1,
+        "maximum": 50,
+        "title": "Max Repos",
+        "type": "integer",
+        "description": "Global cap on active repos deep-scanned across all workspaces."
+      },
+      "max_files_per_repo": {
+        "default": 10,
+        "minimum": 1,
+        "maximum": 100,
+        "title": "Max Files Per Repo",
+        "type": "integer"
+      },
+      "max_commits_per_repo": {
+        "default": 10,
+        "minimum": 0,
+        "maximum": 100,
+        "title": "Max Commits Per Repo",
+        "type": "integer"
+      },
+      "recent_repos_count": {
+        "default": 25,
+        "minimum": 1,
+        "maximum": 100,
+        "title": "Recent Repos Count",
+        "type": "integer",
+        "description": "Recent top-level dirs per workspace for fallback context."
+      },
+      "include_scratch_dirs": {
+        "default": false,
+        "title": "Include Scratch Dirs",
+        "type": "boolean",
+        "description": "Include @* scratch directories when matching active repos."
+      }
+    },
+    "title": "worklog_workspace_activityArguments"
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": true,
+    "title": "worklog_workspace_activityDictOutput"
+  }
+}

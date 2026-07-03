@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "git-worktrees-mcp"
+version = "0.1.0"
+description = "MCP server: clone fork + upstream, add git worktree from upstream branch, push to origin"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.1.0", "flake8>=6.0"]
+
+[project.scripts]
+git-worktrees-mcp = "git_worktrees_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["git_worktrees_mcp*"]
+
+[tool.setuptools.package-data]
+git_worktrees_mcp = ["repos.ini"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
