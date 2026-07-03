@@ -24,7 +24,3 @@ include = ["git_worktrees_mcp*"]
 
 [tool.setuptools.package-data]
 git_worktrees_mcp = ["repos.ini"]
-
-[tool.ruff]
-line-length = 100
-target-version = "py310"

@@ -27,7 +27,3 @@ jira-cli-mcp = "jira_cli.mcp_server:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["jira_cli*"]
-
-[tool.ruff]
-line-length = 100
-target-version = "py310"

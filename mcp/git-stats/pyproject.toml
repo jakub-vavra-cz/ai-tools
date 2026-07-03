@@ -22,9 +22,5 @@ git-stats-mcp = "git_stats.server:main"
 where = ["."]
 include = ["git_stats*"]
 
-[tool.ruff]
-line-length = 100
-target-version = "py310"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]

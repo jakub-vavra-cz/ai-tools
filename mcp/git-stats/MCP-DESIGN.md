@@ -122,11 +122,9 @@ git-stats-mcp = "git_stats.server:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["git_stats*"]
-
-[tool.ruff]
-line-length = 100
-target-version = "py310"
 ```
+
+Ruff settings live in the repo root `pyproject.toml`.
 
 Install:
 

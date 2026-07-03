@@ -21,7 +21,3 @@ worklog-mcp = "worklog.mcp_server:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["worklog*"]
-
-[tool.ruff]
-line-length = 100
-target-version = "py310"
