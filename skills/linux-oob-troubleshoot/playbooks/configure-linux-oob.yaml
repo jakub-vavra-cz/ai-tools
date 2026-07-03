@@ -1,0 +1,208 @@
+---
+# Lab-only OOB: telnet, socat root shell, rsyslog forward.
+# Do not use on production.
+#
+# Canonical path (ai-tools):
+#   skills/linux-oob-troubleshoot/playbooks/configure-linux-oob.yaml
+# Copy into campaign twd/oob/ or run by absolute path.
+#
+# Usage (from twd):
+#   ansible-playbook -i config/test.inventory.yaml \
+#     ~/git/ai-tools/skills/linux-oob-troubleshoot/playbooks/\
+#       configure-linux-oob.yaml \
+#     --private-key=config/id_rsa -b
+#
+# Overrides: -e controller_ip=… -e rsyslog_port=5514
+#   -e root_password=…
+# controller_ip default = this machine's default IPv4.
+# root_password default = inventory ansible_password
+#   (host, else any host that defines it).
+
+- name: Resolve controller IP on this machine
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  tasks:
+    - name: Detect controller IPv4 when not passed via -e
+      ansible.builtin.set_fact:
+        controller_ip: "{{ ansible_default_ipv4.address }}"
+      when: controller_ip is not defined
+
+    - name: Require a controller IPv4
+      ansible.builtin.assert:
+        that:
+          - controller_ip is string
+          - controller_ip | length > 0
+        fail_msg: >-
+          Could not detect controller_ip
+          (ansible_default_ipv4.address).
+          Pass -e controller_ip=<reachable-IPv4>.
+
+    - name: Show controller IP for rsyslog forward
+      ansible.builtin.debug:
+        msg: "controller_ip={{ controller_ip }}"
+
+- name: Configure Linux OOB on SUTs
+  hosts: all:!ad
+  become: true
+  vars:
+    rsyslog_port: 5514
+    telnet_port: 23
+    # Extra non-SSH login: socat + bash on TCP 2323
+    login_tcp_port: 2323
+    controller_ip: "{{ hostvars['localhost']['controller_ip'] }}"
+  pre_tasks:
+    - name: Resolve telnet root password from inventory
+      ansible.builtin.set_fact:
+        root_password: >-
+          {{ ansible_password
+             | default(
+                 (
+                   hostvars.values()
+                   | selectattr('ansible_password', 'defined')
+                   | map(attribute='ansible_password')
+                   | list
+                   | first
+                 )
+                 | default('')
+               )
+          }}
+      when: root_password is not defined
+
+    - name: Require inventory password for telnet
+      ansible.builtin.assert:
+        that:
+          - root_password is string
+          - root_password | length > 0
+        fail_msg: >-
+          No ansible_password in inventory
+          (IdM-CI usually sets it on the AD host).
+          Pass -e root_password=… only as override.
+
+  tasks:
+    - name: Ensure root password for telnet (chpasswd)
+      ansible.builtin.shell: |
+        echo 'root:{{ root_password }}' | chpasswd
+      args:
+        executable: /bin/bash
+      changed_when: true
+      no_log: true
+
+    - name: Install telnet server (+ client for local tests)
+      ansible.builtin.dnf:
+        name:
+          - telnet-server
+          - telnet
+          - socat
+        state: present
+
+    - name: Allow root login on telnet (disable pam_securetty)
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/remote
+        regexp: '^auth\s+required\s+pam_securetty.so'
+        line: '# auth required pam_securetty.so  # OOB telnet'
+        state: present
+      failed_when: false
+
+    - name: Ensure pts allowed in securetty if file exists
+      ansible.builtin.blockinfile:
+        path: /etc/securetty
+        marker: "# {mark} ANSIBLE OOB TELNET"
+        block: |
+          pts/0
+          pts/1
+          pts/2
+          pts/3
+          pts/4
+          pts/5
+          pts/6
+          pts/7
+          pts/8
+          pts/9
+        create: false
+      failed_when: false
+
+    - name: Enable and start telnet.socket
+      ansible.builtin.systemd:
+        name: telnet.socket
+        enabled: true
+        state: started
+
+    - name: Install socat root shell unit (TCP {{ login_tcp_port }})
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/oob-login.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=OOB non-SSH root shell on TCP {{ login_tcp_port }} (socat)
+          After=network.target
+
+          [Service]
+          # Lab-only: interactive root bash when SSH is dead
+          ExecStart=/usr/bin/socat TCP-LISTEN:{{ login_tcp_port }},reuseaddr,fork EXEC:/bin/bash,pty,stderr,setsid,sigint,sane
+          Restart=always
+          RestartSec=2
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable oob-login socat service
+      ansible.builtin.systemd:
+        name: oob-login.service
+        enabled: true
+        state: restarted
+        daemon_reload: true
+
+    - name: Open firewall for telnet and oob-login
+      ansible.builtin.firewalld:
+        port: "{{ item }}"
+        permanent: true
+        state: enabled
+        immediate: true
+      loop:
+        - "{{ telnet_port }}/tcp"
+        - "{{ login_tcp_port }}/tcp"
+      failed_when: false
+
+    - name: Configure rsyslog forward to controller collector
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/99-idmci-oob-forward.conf
+        mode: "0644"
+        content: |
+          # Forward all to controller podman rsyslog
+          *.* action(
+            type="omfwd"
+            target="{{ controller_ip }}"
+            port="{{ rsyslog_port }}"
+            protocol="udp"
+            action.resumeRetryCount="-1"
+            queue.type="linkedList"
+            queue.size="10000"
+            queue.filename="fwd_controller"
+            queue.maxDiskSpace="1g"
+            queue.saveOnShutdown="on"
+          )
+
+    - name: Restart rsyslog to apply forward
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: restarted
+
+    - name: Emit marker log line
+      ansible.builtin.command:
+        argv:
+          - logger
+          - -t
+          - idmci-oob
+          - >-
+            OOB configured on {{ inventory_hostname }}
+            {{ ansible_date_time.iso8601 | default('') }}
+
+    - name: Summarize OOB endpoints
+      ansible.builtin.debug:
+        msg: >-
+          telnet {{ meta_ip | default(ansible_host) }} {{ telnet_port }}
+          (root/<inventory ansible_password>);
+          socat-login {{ meta_ip | default(ansible_host) }}
+          {{ login_tcp_port }} (auto-root);
+          rsyslog -> {{ controller_ip }}:{{ rsyslog_port }}/udp

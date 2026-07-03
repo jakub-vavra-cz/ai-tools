@@ -1,0 +1,235 @@
+---
+name: jira-cli-mcp
+description: >-
+  Uses the rh-jira-cli MCP (Jira Cloud REST) via call_mcp_tool: search, fetch issues,
+  list transitions, update fields, add comments, and apply workflow transitions with
+  correct parameter names. Prefer skills/jira-cli-mcp/reference.md for IDM/RHEL
+  issue types and transition names instead of fetching transitions each time.
+  Use when the user mentions Jira, IDM-, RHEL tickets, jira-cli, jira MCP,
+  transitions, or wants issues updated from the agent without shell jira-cli.
+---
+
+# jira-cli MCP
+
+## Server and tools
+
+- **MCP server id (Cursor):** `user-jira-cli`
+- **Tool names:** `jira_search`, `jira_get_issue`, `jira_get_transitions`, `jira_update_issue`, `jira_create_issue`, `jira_list_mine`, `jira_list_for_email`, `jira_agenda`, `jira_backlog`, `jira_done`, `jira_list_link_types`, `jira_create_issue_link`, `jira_create_issue_link_explicit`, `jira_delete_issue_link`, `jira_list_issue_links`, `jira_move_issue`, `jira_list_fields`, `jira_list_sprints`
+- Invoke with `call_mcp_tool`: `server: "user-jira-cli"`, `toolName: "jira_update_issue"`, etc.
+
+Auth is configured in MCP (typically `JIRA_URL`, `JIRA_EMAIL` or `JIRA_USER`, `JIRA_API_TOKEN`). The MCP sets non-interactive mode.
+
+---
+
+## Critical: `jira_update_issue` parameters
+
+The tool schema matches the jira-cli edit surface. **Unknown keys are ignored** (no error), so typos silently do nothing.
+
+| Goal | Correct argument | Wrong (ignored) |
+|------|-------------------|-----------------|
+| Move workflow | `transition` — transition **name** (e.g. `"Review"`, `"In Progress"`, `"Closed"`) or id string (e.g. `"51"`) | `transition_id` |
+| Close with resolution | `transition: "Closed"` **and** `resolution: "Not a Bug"` (or another allowed resolution name) | setting `Resolution` alone via `field_pairs` without `transition` |
+| VEX Justification | `vex_justification: "Component not Present"` (option value); with a closing transition it is sent on the transition screen | — |
+| Add comment | `comment` — plain string | — |
+| Issue key | `issue_key` | `issue` |
+
+**Always use `transition`, never `transition_id`.**
+
+For **IDM** and **RHEL**, read [reference.md](reference.md) first (issue types, transition names, Closed screen fields, resolutions, VEX options). Pick the transition **name** from that map and call `jira_update_issue` — do **not** call `jira_get_transitions` on every status change.
+
+Call `jira_get_transitions` only when:
+
+- the project is not IDM/RHEL, or the issue type is not covered in the reference;
+- a transition from the reference fails (guards, renamed workflow);
+- you need live screen field metadata beyond what the reference lists.
+
+You may set **`comment`**, **`transition`**, **`resolution`**, and **`vex_justification`** in the same `jira_update_issue` call when closing.
+
+Example close:
+
+```json
+{
+  "issue_key": "RHEL-217423",
+  "comment": "Only logsrvd is affected; not packaged for RHEL.",
+  "transition": "Closed",
+  "resolution": "Not a Bug",
+  "vex_justification": "Component not Present"
+}
+```
+
+---
+
+## `jira_get_issue`
+
+- Required: **`issue_key`** (e.g. `"IDM-6048"`).
+- Optional: `brief: true` for a smaller payload (status, assignee, summary, comments, etc.).
+
+---
+
+## `jira_search`
+
+The CLI requires a real search scope. Pass at least one of:
+
+- **`jql`**: raw JQL (preferred for precise queries), e.g. `summary ~ "9.9" AND summary ~ "sudo" ORDER BY updated DESC`
+- **`term`** plus filters such as **`project`**, **`status`**, **`unfinished_only`**, etc.
+
+Calling with empty or unusable combinations can error with: *Provide TERM, one or more search filters, --project, --unfinished, or --jql.*
+
+---
+
+## `jira_get_transitions`
+
+- Argument: **`issue_key`** (required).
+- Optional: **`expand_fields: true`** — include each transition's screen fields (e.g. required Resolution on Closed, optional VEX Justification). Prefer CLI `jira-cli transitions KEY --expand-fields` if the MCP tool omits expand.
+- Returns `transitions[]` with `id`, `name`, and target `to.name` (status). Use **`name`** for `transition` on update unless you standardize on ids.
+- For IDM/RHEL day-to-day work, prefer [reference.md](reference.md) instead of this tool.
+
+---
+
+## `jira_create_issue`
+
+Uses **`transition`** (not `transition_id`) for an initial transition after create, same as update.
+
+---
+
+## Short workflows
+
+**Find a ticket by text**
+
+1. `jira_search` with `jql` matching summary/project text.
+2. `jira_get_issue` with `issue_key` for details.
+
+**Hand off for review with MR link (IDM)**
+
+1. Confirm `"Review"` in [reference.md](reference.md) (IDM workflow).
+2. `jira_update_issue` with `issue_key`, `comment: "<MR URL>"`, `transition: "Review"`.
+
+**Change status (IDM / RHEL)**
+
+1. Look up the target transition name in [reference.md](reference.md).
+2. `jira_update_issue` with `issue_key` and `transition: "<exact transition name>"`.
+3. For **Closed**, also pass required `resolution` (and `vex_justification` for RHEL Vulnerability when applicable) — see reference Closed screens.
+
+If a transition fails, call `jira_get_transitions` for that issue and retry with a name from the live response (or an intermediate step if the workflow is no longer fully global).
+
+---
+
+## Examples (argument shapes)
+
+```json
+{
+  "issue_key": "IDM-6048",
+  "comment": "https://example.com/mr/55",
+  "transition": "Review"
+}
+```
+
+```json
+{
+  "jql": "project = IDM AND status = New AND assignee = currentUser() ORDER BY updated DESC",
+  "max_results": 20
+}
+```
+
+```json
+{
+  "issue_key": "IDM-6048"
+}
+```
+
+Third example is **`jira_get_transitions`** (fallback only for IDM/RHEL) — same `issue_key` pattern as **`jira_get_issue`**.
+
+See [reference.md](reference.md) for IDM/RHEL transition maps and Closed-field recipes.
+
+---
+
+## `jira_agenda`
+
+My unfinished sprint tickets (same as `jira-cli agenda --json`).
+
+- Optional: **`sprint`** — sprint id or name; default resolves active sprint via pattern.
+- Optional: **`sprint_pattern`** — glob for sprint name (default `*IDM-SSSD*`).
+- Optional: **`sprint_project`** — project key for sprint lookup (default `IDM`).
+- Optional: **`preferred_board`** — board name hint (default `rhel-idm-sssd`).
+- Optional: **`refresh_sprint_cache`**, **`max_results`**, **`show_story_points`**.
+
+Returns `sections`, `issues` (with `my_roles`, optional `git_pull_request`), sprint metadata, and JQL.
+
+---
+
+## `jira_backlog`
+
+My backlog tickets not in the active sprint (same as `jira-cli backlog --json`).
+
+- Optional: **`sprint`**, **`sprint_pattern`**, **`sprint_project`**, **`preferred_board`** — same as `jira_agenda` (defaults: active *IDM-SSSD* sprint in project IDM).
+- Optional: **`refresh_sprint_cache`**, **`max_results`** (default 100), **`show_story_points`** (default true), **`include_future_sprints`** (default true).
+
+Returns issues assigned to or reported by the current user in New, Refinement, or Backlog status, grouped in `sections`, with per-issue `sprint`, `story_points` totals, and `future_sprints` for planning.
+
+---
+
+## `jira_done`
+
+Issues touched today for end-of-day summaries (same as `jira-cli done --json`). Prefer this over raw `jira_search` with `updatedBy` — that clause often returns empty on `redhat.atlassian.net`.
+
+- Optional: **`activity_date`** — `YYYY-MM-DD` instead of today.
+- Optional: **`project`** — project key filter.
+- Optional: **`max_results`** (default 30).
+
+Tries `updatedBy = currentUser()` first; when empty, falls back to list-mine roles + `updated` date window. Returns `strategy` (`updated_by` or `role_fallback`), `issues`, `count`, and optional `note`.
+
+---
+
+## Issue links
+
+**List link types**
+
+```json
+{ "search": "block" }
+```
+
+Tool: **`jira_list_link_types`**. Returns `name`, `inward`, `outward` for each type.
+
+**Create link (preferred)**
+
+```json
+{
+  "source_key": "IDM-7305",
+  "target_key": "IDM-6829",
+  "link_type": "Blocks",
+  "as_relationship": "blocks"
+}
+```
+
+Tool: **`jira_create_issue_link`**. `as_relationship` is the label shown on `source_key` toward `target_key` — must match the type's inward or outward label (from `jira_list_link_types`).
+
+**Create link (explicit API keys)**
+
+Tool: **`jira_create_issue_link_explicit`** with `link_type`, `inward_issue_key`, `outward_issue_key`.
+
+**List links on a ticket**
+
+```json
+{ "issue_key": "IDM-7305" }
+```
+
+Tool: **`jira_list_issue_links`**. Returns `links[]` with `id`, `relationship`, `other_issue`.
+
+**Delete a link**
+
+```json
+{ "link_id": "2045989" }
+```
+
+Tool: **`jira_delete_issue_link`**. Link id comes from `jira_list_issue_links`.
+
+---
+
+## `jira_move_issue`
+
+Move an issue to another project (bulk move API).
+
+- Required: **`issue_key`**, **`project`** (target project key).
+- Optional: **`issue_type`** — defaults to keeping the current type name in the target project.
+
+Returns `issue_key` (new key if changed), `source_issue_key`, `target_project`, `target_issue_type`, and task metadata.

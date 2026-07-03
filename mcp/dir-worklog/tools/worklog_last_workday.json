@@ -1,0 +1,28 @@
+{
+  "name": "worklog_last_workday",
+  "description": "Return the previous Mon–Fri workday as an ISO date (Monday maps to prior Friday).",
+  "arguments": {
+    "type": "object",
+    "properties": {
+      "reference_date": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Reference Date",
+        "description": "ISO date to measure from. Default: today (local)."
+      }
+    },
+    "title": "worklog_last_workdayArguments"
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": true,
+    "title": "worklog_last_workdayDictOutput"
+  }
+}

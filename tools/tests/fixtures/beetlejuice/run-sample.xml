@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites>
+  <properties>
+    <property name="polarion-custom-logs" value="https://example.com/artifacts/run/" />
+    <property name="polarion-custom-component" value="sudo" />
+    <property name="polarion-custom-poolteam" value="sst_idm_sudo" />
+    <property name="polarion-custom-composeid" value="RHEL-10.2-20260408.1" />
+    <property name="polarion-custom-build" value="sudo-1.9.17-1.el10.x86_64" />
+    <property name="polarion-custom-arch" value="x8664" />
+    <property name="polarion-custom-assignee" value="idm-jenkins" />
+    <property name="polarion-create-defects" value="false" />
+    <property name="polarion-dry-run" value="false" />
+    <property name="polarion-include-skipped" value="true" />
+    <property name="polarion-lookup-method" value="custom" />
+    <property name="polarion-custom-lookup-method-field-id" value="testCaseID" />
+    <property name="polarion-project-id" value="RHEL_IDM" />
+    <property name="polarion-testrun-id" value="test-run-123" />
+    <property name="polarion-testrun-status-id" value="finished" />
+    <property name="polarion-testrun-title" value="pytest-sudo-tier1" />
+  </properties>
+  <testsuite name="pytest" errors="0" failures="1" skipped="1" tests="3" time="3.0">
+    <testcase classname="tests.test_foo" name="test_pass" time="1.0">
+      <properties>
+        <property name="polarion-testcase-id" value="idm-sudo-tc::tests/test_foo.py::test_pass" />
+      </properties>
+    </testcase>
+    <testcase classname="tests.test_foo" name="test_fail" time="2.0">
+      <failure message="assert False">traceback here</failure>
+      <properties>
+        <property name="polarion-testcase-id" value="idm-sudo-tc::tests/test_foo.py::test_fail" />
+      </properties>
+    </testcase>
+    <testcase classname="tests.test_foo" name="test_skip" time="0.0">
+      <skipped message="not today" />
+      <properties>
+        <property name="polarion-testcase-id" value="idm-sudo-tc::tests/test_foo.py::test_skip" />
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
