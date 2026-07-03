@@ -1,0 +1,100 @@
+<testcases project-id="RHEL_IDM"><properties>
+    <property name="dry-run" value="false" />
+    <property name="lookup-method" value="custom" />
+    <property name="polarion-custom-lookup-method-field-id" value="testCaseID" />
+  </properties>
+  <testcase id="idm-sssd-tc::tests/test_access_control_ldap_filter.py::test_access_filter__single_ldap_attribute_permits_user_login (ad)" status-id="approved">
+    <title>IDM-SSSD-TC: LDAP attribute filter permits specific user login</title>
+    <description>&lt;pre&gt;Topology: ad
+
+:title: LDAP attribute filter permits specific user login
+:description: Verifies that SSSD allows login only for users matching an specific LDAP attribute.
+:setup:
+    1. Create users ‘user1’ and ‘user2’
+    2. Configure SSSD with:
+        AD/Samba: ‘access_provider = ad’ and set ‘ad_access_filter’ filter
+        LDAP: ‘access_provider = ldap’ and set ‘ldap_access_filter’ filter
+        Set the filter to allow only `user1` to login.
+    3. Start SSSD
+:steps:
+    1. Attempt login with `user1`.
+    2. Attempt login with `user2`.
+:expectedresults:
+    1. `user1` is successfully authenticated.
+    2. `user2` is denied access.
+:customerscenario: False&lt;/pre&gt;</description>
+    <test-steps>
+      <test-step>
+        <test-step-column id="step">Attempt login with `user1`.</test-step-column>
+        <test-step-column id="expectedResult">`user1` is successfully authenticated.</test-step-column>
+      </test-step>
+      <test-step>
+        <test-step-column id="step">Attempt login with `user2`.</test-step-column>
+        <test-step-column id="expectedResult">`user2` is denied access.</test-step-column>
+      </test-step>
+    </test-steps>
+    <custom-fields>
+      <custom-field id="setup" content="&lt;pre&gt;1. Create users ‘user1’ and ‘user2’&#10;2. Configure SSSD with:&#10;    AD/Samba: ‘access_provider = ad’ and set ‘ad_access_filter’ filter&#10;    LDAP: ‘access_provider = ldap’ and set ‘ldap_access_filter’ filter&#10;    Set the filter to allow only `user1` to login.&#10;3. Start SSSD&lt;/pre&gt;" />
+      <custom-field id="customerscenario" content="false" />
+      <custom-field id="caseimportance" content="critical" />
+      <custom-field id="caseautomation" content="automated" />
+      <custom-field id="casecomponent" content="sssd" />
+      <custom-field id="subsystemteam" content="rhel-idm-sssd" />
+      <custom-field id="upstream" content="yes" />
+      <custom-field id="automation_script" content="/tests/test_access_control_ldap_filter.py#L20" />
+      <custom-field id="testtype" content="functional" />
+      <custom-field id="caselevel" content="system" />
+    </custom-fields>
+    <linked-work-items>
+      <linked-work-item lookup-method="name" role-id="verifies" workitem-id="access control access_filter" />
+    </linked-work-items>
+  <hyperlinks><hyperlink uri="https://github.com/SSSD/sssd/tree/sssd-2-12/../sssd/src/tests/system/" role-id="testscript" /></hyperlinks></testcase>
+  <testcase id="idm-sssd-tc::tests/test_access_control_ldap_filter.py::test_access_filter__group_attributes_permits_user_login (ad)" status-id="approved">
+    <title>IDM-SSSD-TC: LDAP attribute permits user login</title>
+    <description>&lt;pre&gt;Topology: ad
+
+:title: LDAP attribute permits user login
+:description: Tests whether SSSD allows login based on LDAP group membership.
+:setup:
+    1. Create users `user1` and `user2`.
+    2. Create groups `group1` and `group2`.
+    3. Add `user1` to `group1`, and `user2` to `group2`.
+    4. Configure SSSD with:
+        AD/Samba: ‘access_provider = ad’ and set ‘ad_access_filter’ filter
+        LDAP: ‘access_provider = ldap’ and set ‘ldap_access_filter’ filter
+    5. Set the filter to allow users in `group1` to login.
+    6. Start SSSD.
+:steps:
+    1. Attempt login with `user1`.
+    2. Attempt login with `user2`.
+:expectedresults:
+    1. `user1` is successfully authenticated.
+    2. `user2` is denied access.
+:customerscenario: False&lt;/pre&gt;</description>
+    <test-steps>
+      <test-step>
+        <test-step-column id="step">Attempt login with `user1`.</test-step-column>
+        <test-step-column id="expectedResult">`user1` is successfully authenticated.</test-step-column>
+      </test-step>
+      <test-step>
+        <test-step-column id="step">Attempt login with `user2`.</test-step-column>
+        <test-step-column id="expectedResult">`user2` is denied access.</test-step-column>
+      </test-step>
+    </test-steps>
+    <custom-fields>
+      <custom-field id="setup" content="&lt;pre&gt;1. Create users `user1` and `user2`.&#10;2. Create groups `group1` and `group2`.&#10;3. Add `user1` to `group1`, and `user2` to `group2`.&#10;4. Configure SSSD with:&#10;    AD/Samba: ‘access_provider = ad’ and set ‘ad_access_filter’ filter&#10;    LDAP: ‘access_provider = ldap’ and set ‘ldap_access_filter’ filter&#10;5. Set the filter to allow users in `group1` to login.&#10;6. Start SSSD.&lt;/pre&gt;" />
+      <custom-field id="customerscenario" content="false" />
+      <custom-field id="caseimportance" content="critical" />
+      <custom-field id="caseautomation" content="automated" />
+      <custom-field id="casecomponent" content="sssd" />
+      <custom-field id="subsystemteam" content="rhel-idm-sssd" />
+      <custom-field id="upstream" content="yes" />
+      <custom-field id="automation_script" content="/tests/test_access_control_ldap_filter.py#L60" />
+      <custom-field id="testtype" content="functional" />
+      <custom-field id="caselevel" content="system" />
+    </custom-fields>
+    <linked-work-items>
+      <linked-work-item lookup-method="name" role-id="verifies" workitem-id="access control access_filter" />
+    </linked-work-items>
+  <hyperlinks><hyperlink uri="https://github.com/SSSD/sssd/tree/sssd-2-12/../sssd/src/tests/system/" role-id="testscript" /></hyperlinks></testcase>
+  </testcases>
