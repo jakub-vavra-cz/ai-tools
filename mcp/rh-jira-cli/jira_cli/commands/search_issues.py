@@ -10,6 +10,7 @@ from jira_cli.api import JiraApiError, JiraClient
 from jira_cli.config import Settings
 from jira_cli.jql import (
     add_jql_and_before_order,
+    ensure_jql_order_by,
     jql_quote,
     jql_user_identity_for_clause,
     unfinished_condition_from_statuses,
@@ -226,9 +227,9 @@ def compose_ordered_search_jql(
 
     if unfinished_only and unfinished_clause:
         if jql.strip() != unfinished_clause.strip():
-            return add_jql_and_before_order(jql + " ORDER BY updated DESC", unfinished_clause)
-        return jql + " ORDER BY updated DESC"
-    return jql + " ORDER BY updated DESC"
+            return add_jql_and_before_order(ensure_jql_order_by(jql), unfinished_clause)
+        return ensure_jql_order_by(jql)
+    return ensure_jql_order_by(jql)
 
 
 def fetch_search_issues_data(

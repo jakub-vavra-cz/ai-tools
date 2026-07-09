@@ -121,13 +121,39 @@ def my_issues_jql(contributors_field_id: str | None = None) -> str:
     return f"{list_mine_base_or_clause(contributors_field_id)} ORDER BY updated DESC"
 
 
-def add_jql_and_before_order(jql: str, condition: str) -> str:
-    """Insert AND (condition) before the trailing ORDER BY clause."""
+def split_jql_order_by(jql: str) -> tuple[str, str | None]:
+    """Return ``(main, order_by_expression)``; ``order_by_expression`` is ``None`` when absent."""
     parts = jql.rsplit(" ORDER BY ", 1)
     if len(parts) != 2:
-        return f"({jql.strip()}) AND ({condition})"
+        return jql.strip(), None
     main, order_by = parts
-    return f"({main.strip()}) AND ({condition}) ORDER BY {order_by}"
+    return main.strip(), order_by.strip()
+
+
+def ensure_jql_order_by(jql: str, *, order_by: str = "updated DESC") -> str:
+    """Append ``ORDER BY`` only when the query does not already include one."""
+    main, existing = split_jql_order_by(jql)
+    if existing is not None:
+        return jql.strip()
+    return f"{main} ORDER BY {order_by}"
+
+
+def normalize_extra_jql_fragment(extra_jql: str) -> str:
+    """Strip a leading ``AND``/``OR`` from user-supplied JQL fragments."""
+    fragment = extra_jql.strip()
+    upper = fragment.upper()
+    for prefix in ("AND ", "OR "):
+        if upper.startswith(prefix):
+            return fragment[len(prefix) :].strip()
+    return fragment
+
+
+def add_jql_and_before_order(jql: str, condition: str) -> str:
+    """Insert AND (condition) before the trailing ORDER BY clause."""
+    main, order_by = split_jql_order_by(jql)
+    if order_by is None:
+        return f"({main}) AND ({condition})"
+    return f"({main}) AND ({condition}) ORDER BY {order_by}"
 
 
 def jql_quote(value: str) -> str:
@@ -147,7 +173,7 @@ def combine_list_filters(
     if sprint_id is not None:
         parts.append(f"sprint = {int(sprint_id)}")
     if extra_jql is not None and extra_jql.strip():
-        parts.append(f"({extra_jql.strip()})")
+        parts.append(f"({normalize_extra_jql_fragment(extra_jql)})")
     if not parts:
         return None
     return " AND ".join(parts)
