@@ -8,6 +8,7 @@ from typing import Any
 
 from git_stats.cli_util import run_cmd, which
 from git_stats.dates import event_on_date, parse_activity_date
+from git_stats.done_group import group_done_items
 from git_stats.models import DoneItem, DoneResult
 
 
@@ -222,4 +223,4 @@ def fetch_gitlab_done(
         items.append(item)
 
     items.sort(key=lambda item: item.created_at, reverse=True)
-    return DoneResult(items=items, username=username)
+    return DoneResult(items=group_done_items(items), username=username)

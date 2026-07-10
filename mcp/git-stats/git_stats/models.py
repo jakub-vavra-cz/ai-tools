@@ -52,6 +52,7 @@ class DoneItem:
     created_at: str
     kind: str
     detail: str | None = None
+    events: list[DoneItem] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -64,6 +65,16 @@ class DoneItem:
         }
         if self.detail:
             data["detail"] = self.detail
+        if self.events:
+            seen: set[str] = set()
+            actions: list[str] = []
+            for event in reversed(self.events):
+                if event.action in seen:
+                    continue
+                seen.add(event.action)
+                actions.append(event.action)
+            data["actions"] = actions
+            data["events"] = [event.to_dict() for event in self.events]
         return data
 
 

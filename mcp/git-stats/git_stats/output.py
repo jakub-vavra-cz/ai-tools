@@ -67,10 +67,24 @@ def print_done(result: dict[str, Any], *, out: TextIO = sys.stdout, quiet: bool 
             for item in items:
                 detail = item.get("detail")
                 detail_part = f"  ({detail})" if detail else ""
-                print(
-                    f"    {item['action']}  {item['ref']}{detail_part}  {item['title']}  {item['url']}",
-                    file=out,
-                )
+                events = item.get("events") or []
+                if len(events) > 1:
+                    print(
+                        f"    {item['action']}  {item['ref']}{detail_part}  {item['title']}  {item['url']}",
+                        file=out,
+                    )
+                    for event in events:
+                        event_detail = event.get("detail")
+                        event_detail_part = f"  ({event_detail})" if event_detail else ""
+                        print(
+                            f"      - {event['action']}{event_detail_part}  {event['created_at']}",
+                            file=out,
+                        )
+                else:
+                    print(
+                        f"    {item['action']}  {item['ref']}{detail_part}  {item['title']}  {item['url']}",
+                        file=out,
+                    )
         else:
             print("    (none)", file=out)
 
