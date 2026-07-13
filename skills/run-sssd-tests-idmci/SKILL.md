@@ -197,6 +197,8 @@ The **test** phase runs `pytest-mh:` / `pytests:` steps. Extra pytest filtering 
 
 When **diagnosing** a prior run (not starting a fresh one), check:
 
+For **Jenkins CI failures**, start from the build URL using [analyze-jenkins-failure](../analyze-jenkins-failure/SKILL.md) to fetch console output, artifact logs, and `metadata.mod.yaml`.
+
 | File | Meaning |
 |------|---------|
 | `pytest-run.rc` | `0` = pass, non-zero = fail |

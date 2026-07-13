@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 
 [project.scripts]
 clean-twd = "ai_tools.clean_twd:main"
+pull-jenkins-artifacts = "ai_tools.jenkins_artifacts:main"
 
 [build-system]
 requires = ["setuptools>=61"]

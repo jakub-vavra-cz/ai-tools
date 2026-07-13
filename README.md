@@ -56,6 +56,7 @@ pip install -e /path/to/ai-tools/tools
 | Command | Purpose |
 |---------|---------|
 | `clean-twd` | Clean IdM-CI `twd` artifacts before test re-execution |
+| `pull-jenkins-artifacts` | Fetch Jenkins console + IdM-CI twd artifacts from the artifact server |
 
 See [tools/README.md](tools/README.md).
 
@@ -64,6 +65,7 @@ See [tools/README.md](tools/README.md).
 | Skill | Purpose |
 |-------|---------|
 | `agenda` | Daily work agenda from worklog, git-stats, and jira-cli MCP tools |
+| `analyze-jenkins-failure` | Debug IdM-CI Jenkins jobs from a build URL (console → `RD_JR_ARTIFACTS_URL` → logs + `metadata.mod.yaml` → reproduction) |
 | `backlog` | Backlog tickets for estimation and sprint planning via jira-cli MCP |
 | `jira-cli-mcp` | Jira issue search, updates, and transitions via the jira-cli MCP |
 | `review-changes` | Clone a PR/MR, lint changed files, and review diff quality |
