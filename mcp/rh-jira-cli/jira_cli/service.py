@@ -9,6 +9,7 @@ from typing import Any, Mapping, Optional
 from jira_cli.api import JiraApiError, JiraClient
 from jira_cli.commands import edit_issue as edit_issue_cmd
 from jira_cli.commands import agenda as agenda_cmd
+from jira_cli.commands import backlog as backlog_cmd
 from jira_cli.commands import field_map as field_map_cmd
 from jira_cli.commands import list_issues as list_issues_cmd
 from jira_cli.commands import move_issue as move_issue_cmd
@@ -432,6 +433,46 @@ class JiraService:
         )
         if payload is None:
             msg = err.getvalue().strip() or "agenda failed"
+            raise JiraApiError(msg, status_code=None)
+        return payload
+
+    def backlog(
+        self,
+        *,
+        sprint: str | None = None,
+        sprint_pattern: str | None = None,
+        sprint_project: str = backlog_cmd.DEFAULT_SPRINT_PROJECT,
+        preferred_board: str | None = backlog_cmd.DEFAULT_PREFERRED_BOARD,
+        refresh_sprint_cache: bool = True,
+        max_results: int = 100,
+        show_story_points: bool = True,
+        include_future_sprints: bool = True,
+    ) -> dict[str, Any]:
+        """Same structured payload as ``jira-cli backlog --json``."""
+        err = StringIO()
+        sp_id = self.settings.story_points_field_id
+        if show_story_points and not sp_id:
+            sp_id = edit_issue_cmd.resolve_story_points_field_id(self.client)
+        if show_story_points and not sp_id:
+            raise ValueError(
+                "show_story_points requires a Story Points field "
+                "(set JIRA_STORY_POINTS_FIELD_ID or ensure the site has one named Story Points)."
+            )
+        payload = backlog_cmd.fetch_backlog_data(
+            self.client,
+            self.settings,
+            sprint=sprint,
+            sprint_pattern=sprint_pattern,
+            sprint_project=sprint_project,
+            preferred_board=preferred_board,
+            refresh_sprint_cache=refresh_sprint_cache,
+            max_results=max_results,
+            story_points_field_id=sp_id,
+            include_future_sprints=include_future_sprints,
+            err=err,
+        )
+        if payload is None:
+            msg = err.getvalue().strip() or "backlog failed"
             raise JiraApiError(msg, status_code=None)
         return payload
 

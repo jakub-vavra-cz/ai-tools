@@ -13,7 +13,7 @@ description: >-
 ## Server and tools
 
 - **MCP server id (Cursor):** `user-jira-cli`
-- **Tool names:** `jira_search`, `jira_get_issue`, `jira_get_transitions`, `jira_update_issue`, `jira_create_issue`, `jira_list_mine`, `jira_list_for_email`, `jira_agenda`, `jira_move_issue`, `jira_list_fields`, `jira_list_sprints`
+- **Tool names:** `jira_search`, `jira_get_issue`, `jira_get_transitions`, `jira_update_issue`, `jira_create_issue`, `jira_list_mine`, `jira_list_for_email`, `jira_agenda`, `jira_backlog`, `jira_move_issue`, `jira_list_fields`, `jira_list_sprints`
 - Invoke with `call_mcp_tool`: `server: "user-jira-cli"`, `toolName: "jira_update_issue"`, etc.
 
 Auth is configured in MCP (typically `JIRA_URL`, `JIRA_EMAIL` or `JIRA_USER`, `JIRA_API_TOKEN`). The MCP sets non-interactive mode.
@@ -125,6 +125,17 @@ My unfinished sprint tickets (same as `jira-cli agenda --json`).
 - Optional: **`refresh_sprint_cache`**, **`max_results`**, **`show_story_points`**.
 
 Returns `sections`, `issues` (with `my_roles`, optional `git_pull_request`), sprint metadata, and JQL.
+
+---
+
+## `jira_backlog`
+
+My backlog tickets not in the active sprint (same as `jira-cli backlog --json`).
+
+- Optional: **`sprint`**, **`sprint_pattern`**, **`sprint_project`**, **`preferred_board`** — same as `jira_agenda` (defaults: active *IDM-SSSD* sprint in project IDM).
+- Optional: **`refresh_sprint_cache`**, **`max_results`** (default 100), **`show_story_points`** (default true), **`include_future_sprints`** (default true).
+
+Returns issues assigned to or reported by the current user in New, Refinement, or Backlog status, grouped in `sections`, with per-issue `sprint`, `story_points` totals, and `future_sprints` for planning.
 
 ---
 

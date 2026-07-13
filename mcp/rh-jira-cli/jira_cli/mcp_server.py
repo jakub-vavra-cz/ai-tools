@@ -7,6 +7,7 @@ import sys
 from typing import Any
 
 from jira_cli.commands import agenda as agenda_cmd
+from jira_cli.commands import backlog as backlog_cmd
 from jira_cli.service import JiraService
 
 
@@ -238,6 +239,35 @@ def main() -> None:
             refresh_sprint_cache=refresh_sprint_cache,
             max_results=max_results,
             show_story_points=show_story_points,
+        )
+
+    @mcp.tool()
+    def jira_backlog(
+        sprint: str | None = None,
+        sprint_pattern: str | None = None,
+        sprint_project: str = backlog_cmd.DEFAULT_SPRINT_PROJECT,
+        preferred_board: str | None = backlog_cmd.DEFAULT_PREFERRED_BOARD,
+        refresh_sprint_cache: bool = True,
+        max_results: int = 100,
+        show_story_points: bool = True,
+        include_future_sprints: bool = True,
+    ) -> dict[str, Any]:
+        """
+        My backlog tickets (same as ``jira-cli backlog --json``).
+
+        Issues assigned to or created by the current user in New, Refinement, or Backlog
+        status that are not in the active sprint (default: *IDM-SSSD* in project IDM).
+        Returns sprint metadata, JQL, status sections, story point totals, and future sprints.
+        """
+        return get_svc().backlog(
+            sprint=sprint,
+            sprint_pattern=sprint_pattern,
+            sprint_project=sprint_project,
+            preferred_board=preferred_board,
+            refresh_sprint_cache=refresh_sprint_cache,
+            max_results=max_results,
+            show_story_points=show_story_points,
+            include_future_sprints=include_future_sprints,
         )
 
     @mcp.tool()

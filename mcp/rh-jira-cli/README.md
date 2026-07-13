@@ -21,7 +21,7 @@ pip install 'jira-cli[mcp]'
 jira-cli-mcp
 ```
 
-The server sets `JIRA_CLI_NO_INPUT=1` by default. Tools mirror the CLI: `jira_list_mine`, `jira_list_for_email`, `jira_search`, `jira_get_issue`, `jira_create_issue`, `jira_update_issue`, `jira_agenda`, `jira_move_issue`, `jira_list_fields`, `jira_get_transitions`, `jira_list_sprints`.
+The server sets `JIRA_CLI_NO_INPUT=1` by default. Tools mirror the CLI: `jira_list_mine`, `jira_list_for_email`, `jira_search`, `jira_get_issue`, `jira_create_issue`, `jira_update_issue`, `jira_agenda`, `jira_backlog`, `jira_move_issue`, `jira_list_fields`, `jira_get_transitions`, `jira_list_sprints`.
 
 For programmatic use without MCP, import `JiraService` from `jira_cli.service` (structured dict/list results, no argparse).
 
@@ -108,6 +108,16 @@ jira-cli agenda --json
 jira-cli agenda --sprint 42
 jira-cli agenda --sprint-pattern '*IDM-SSSD-S*' --sprint-project IDM
 jira-cli agenda --no-refresh-sprint-cache
+```
+
+**Backlog** — my pre-sprint tickets for estimation and planning. Same active sprint resolution as **agenda** (that sprint is **excluded**). Issues where you are **assignee** or **reporter**, status **New**, **Refinement**, or **Backlog**, and `sprint not in (<current>)`. Line output includes **relation**, **status**, **sprint** (or `-`), optional **story points**, and **summary**. JSON includes story point totals, per-issue `sprint`, and future sprints on the same board pattern.
+
+```bash
+jira-cli backlog
+jira-cli backlog --json
+jira-cli backlog --no-story-points
+jira-cli backlog --sprint 42
+jira-cli backlog --no-future-sprints
 ```
 
 **Move an issue** to another project (`POST /rest/api/3/bulk/issues/move`). Requires **`--project`**. Keeps the current issue type name unless you pass **`--type`**. Prints the new issue key on stdout (the key changes when the project changes).

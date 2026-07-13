@@ -9,6 +9,7 @@ import sys
 from jira_cli.api import JiraApiError, JiraClient
 from jira_cli.config import ConfigError, load_settings
 from jira_cli.commands import agenda as agenda_cmd
+from jira_cli.commands import backlog as backlog_cmd
 from jira_cli.commands import edit_issue as edit_issue_cmd
 from jira_cli.commands import field_map as field_map_cmd
 from jira_cli.commands import list_issues as list_issues_cmd
@@ -470,6 +471,37 @@ def _cmd_agenda(client: JiraClient, settings, args: argparse.Namespace) -> int:
         max_results=args.max_results,
         show_story_points=show_sp,
         story_points_field_id=sp_id,
+        as_json=args.json,
+        out=sys.stdout,
+        err=sys.stderr,
+        debug=getattr(args, "debug", False),
+    )
+
+
+def _cmd_backlog(client: JiraClient, settings, args: argparse.Namespace) -> int:
+    show_sp = getattr(args, "show_story_points", True)
+    sp_id = settings.story_points_field_id
+    if show_sp and not sp_id:
+        sp_id = edit_issue_cmd.resolve_story_points_field_id(client)
+    if show_sp and not sp_id:
+        print(
+            "jira-cli backlog: --show-story-points requires a Story Points field "
+            "(set JIRA_STORY_POINTS_FIELD_ID or ensure the site has a custom field named Story Points).",
+            file=sys.stderr,
+        )
+        return 2
+    return backlog_cmd.run_backlog(
+        client,
+        settings,
+        sprint=getattr(args, "sprint", None),
+        sprint_pattern=getattr(args, "sprint_pattern", None),
+        sprint_project=getattr(args, "sprint_project", backlog_cmd.DEFAULT_SPRINT_PROJECT),
+        preferred_board=getattr(args, "preferred_board", backlog_cmd.DEFAULT_PREFERRED_BOARD),
+        refresh_sprint_cache=not getattr(args, "no_refresh_sprint_cache", False),
+        max_results=args.max_results,
+        show_story_points=show_sp,
+        story_points_field_id=sp_id,
+        include_future_sprints=not getattr(args, "no_future_sprints", False),
         as_json=args.json,
         out=sys.stdout,
         err=sys.stderr,
@@ -1199,6 +1231,79 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pa.set_defaults(
         handler=_cmd_agenda,
+        sprint=None,
+        sprint_pattern=None,
+        refresh_sprint_cache=True,
+    )
+
+    pb = sub.add_parser(
+        "backlog",
+        help=(
+            "My backlog issues (assignee or reporter) in New/Refinement/Backlog "
+            "not in the current sprint (default: active sprint matching *IDM-SSSD* in project IDM)"
+        ),
+    )
+    pb.add_argument("--max-results", type=int, default=100, help="Page size (default 100)")
+    pb.add_argument("--json", action="store_true", help="JSON: sprint metadata + issues")
+    pb.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print the JQL query on stderr",
+    )
+    pb.add_argument(
+        "--sprint",
+        metavar="ID_OR_NAME",
+        help="Sprint id or name to exclude (overrides --sprint-pattern auto-detection)",
+    )
+    pb.add_argument(
+        "--sprint-pattern",
+        metavar="GLOB",
+        help=(
+            "Active sprint name glob when --sprint is omitted "
+            f"(default: {backlog_cmd.DEFAULT_SPRINT_PATTERN!r})"
+        ),
+    )
+    pb.add_argument(
+        "--sprint-project",
+        metavar="KEY",
+        default=backlog_cmd.DEFAULT_SPRINT_PROJECT,
+        help=f"Project for sprint lookup (default: {backlog_cmd.DEFAULT_SPRINT_PROJECT})",
+    )
+    pb.add_argument(
+        "--preferred-board",
+        metavar="NAME",
+        default=backlog_cmd.DEFAULT_PREFERRED_BOARD,
+        help=(
+            "When several active sprints match --sprint-pattern, prefer this board name "
+            f"(default: {backlog_cmd.DEFAULT_PREFERRED_BOARD!r})"
+        ),
+    )
+    pb.add_argument(
+        "--show-story-points",
+        "-p",
+        action="store_true",
+        dest="show_story_points",
+        default=True,
+        help="Include story points column and totals (default: on)",
+    )
+    pb.add_argument(
+        "--no-story-points",
+        action="store_false",
+        dest="show_story_points",
+        help="Omit story points column and totals",
+    )
+    pb.add_argument(
+        "--no-future-sprints",
+        action="store_true",
+        help="Do not include future sprint list in JSON output",
+    )
+    pb.add_argument(
+        "--no-refresh-sprint-cache",
+        action="store_true",
+        help="Use local sprint cache instead of refetching sprints from Jira",
+    )
+    pb.set_defaults(
+        handler=_cmd_backlog,
         sprint=None,
         sprint_pattern=None,
         refresh_sprint_cache=True,

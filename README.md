@@ -34,7 +34,7 @@ CLI and MCP server for GitHub/GitLab PR/MR queues: review-requested, authored PR
 CLI and MCP server for Jira Cloud (REST API v3 + Agile): list/search/show issues, edit custom fields, sprint membership, comments, and workflow transitions. This has customizations for Red Hat jira to support personalized workflows compared to generic atlassian mcp.
 
 - CLI: `jira-cli`
-- MCP tools: `jira_list_mine`, `jira_search`, `jira_get_issue`, `jira_update_issue`, `jira_agenda`, and others
+- MCP tools: `jira_list_mine`, `jira_search`, `jira_get_issue`, `jira_update_issue`, `jira_agenda`, `jira_backlog`, and others
 - See [mcp/rh-jira-cli/README.md](mcp/rh-jira-cli/README.md)
 
 ### dir-worklog
@@ -64,6 +64,7 @@ See [tools/README.md](tools/README.md).
 | Skill | Purpose |
 |-------|---------|
 | `agenda` | Daily work agenda from worklog, git-stats, and jira-cli MCP tools |
+| `backlog` | Backlog tickets for estimation and sprint planning via jira-cli MCP |
 | `jira-cli-mcp` | Jira issue search, updates, and transitions via the jira-cli MCP |
 | `review-changes` | Clone a PR/MR, lint changed files, and review diff quality |
 | `run-python-static-code-analysis` | Lint and format Python edits using project-configured tools |
