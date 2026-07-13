@@ -13,7 +13,7 @@ description: >-
 ## Server and tools
 
 - **MCP server id (Cursor):** `user-jira-cli`
-- **Tool names:** `jira_search`, `jira_get_issue`, `jira_get_transitions`, `jira_update_issue`, `jira_create_issue`, `jira_list_mine`, `jira_list_for_email`, `jira_agenda`, `jira_backlog`, `jira_move_issue`, `jira_list_fields`, `jira_list_sprints`
+- **Tool names:** `jira_search`, `jira_get_issue`, `jira_get_transitions`, `jira_update_issue`, `jira_create_issue`, `jira_list_mine`, `jira_list_for_email`, `jira_agenda`, `jira_backlog`, `jira_list_link_types`, `jira_create_issue_link`, `jira_create_issue_link_explicit`, `jira_delete_issue_link`, `jira_list_issue_links`, `jira_move_issue`, `jira_list_fields`, `jira_list_sprints`
 - Invoke with `call_mcp_tool`: `server: "user-jira-cli"`, `toolName: "jira_update_issue"`, etc.
 
 Auth is configured in MCP (typically `JIRA_URL`, `JIRA_EMAIL` or `JIRA_USER`, `JIRA_API_TOKEN`). The MCP sets non-interactive mode.
@@ -136,6 +136,51 @@ My backlog tickets not in the active sprint (same as `jira-cli backlog --json`).
 - Optional: **`refresh_sprint_cache`**, **`max_results`** (default 100), **`show_story_points`** (default true), **`include_future_sprints`** (default true).
 
 Returns issues assigned to or reported by the current user in New, Refinement, or Backlog status, grouped in `sections`, with per-issue `sprint`, `story_points` totals, and `future_sprints` for planning.
+
+---
+
+## Issue links
+
+**List link types**
+
+```json
+{ "search": "block" }
+```
+
+Tool: **`jira_list_link_types`**. Returns `name`, `inward`, `outward` for each type.
+
+**Create link (preferred)**
+
+```json
+{
+  "source_key": "IDM-7305",
+  "target_key": "IDM-6829",
+  "link_type": "Blocks",
+  "as_relationship": "blocks"
+}
+```
+
+Tool: **`jira_create_issue_link`**. `as_relationship` is the label shown on `source_key` toward `target_key` — must match the type's inward or outward label (from `jira_list_link_types`).
+
+**Create link (explicit API keys)**
+
+Tool: **`jira_create_issue_link_explicit`** with `link_type`, `inward_issue_key`, `outward_issue_key`.
+
+**List links on a ticket**
+
+```json
+{ "issue_key": "IDM-7305" }
+```
+
+Tool: **`jira_list_issue_links`**. Returns `links[]` with `id`, `relationship`, `other_issue`.
+
+**Delete a link**
+
+```json
+{ "link_id": "2045989" }
+```
+
+Tool: **`jira_delete_issue_link`**. Link id comes from `jira_list_issue_links`.
 
 ---
 

@@ -21,7 +21,7 @@ pip install 'jira-cli[mcp]'
 jira-cli-mcp
 ```
 
-The server sets `JIRA_CLI_NO_INPUT=1` by default. Tools mirror the CLI: `jira_list_mine`, `jira_list_for_email`, `jira_search`, `jira_get_issue`, `jira_create_issue`, `jira_update_issue`, `jira_agenda`, `jira_backlog`, `jira_move_issue`, `jira_list_fields`, `jira_get_transitions`, `jira_list_sprints`.
+The server sets `JIRA_CLI_NO_INPUT=1` by default. Tools mirror the CLI: `jira_list_mine`, `jira_list_for_email`, `jira_search`, `jira_get_issue`, `jira_create_issue`, `jira_update_issue`, `jira_agenda`, `jira_backlog`, `jira_list_link_types`, `jira_create_issue_link`, `jira_create_issue_link_explicit`, `jira_delete_issue_link`, `jira_list_issue_links`, `jira_move_issue`, `jira_list_fields`, `jira_get_transitions`, `jira_list_sprints`.
 
 For programmatic use without MCP, import `JiraService` from `jira_cli.service` (structured dict/list results, no argparse).
 
@@ -118,6 +118,18 @@ jira-cli backlog --json
 jira-cli backlog --no-story-points
 jira-cli backlog --sprint 42
 jira-cli backlog --no-future-sprints
+```
+
+**Issue links** — create, list, and delete relationships between tickets (`POST/DELETE /rest/api/3/issueLink`). Use **`link-types`** to see inward/outward labels (e.g. Blocks: inward=`is blocked by`, outward=`blocks`). With **`link SOURCE TARGET --type Blocks --as blocks`**, SOURCE shows *blocks* toward TARGET (same semantics used when creating IDM-7305 blocking IDM-6829).
+
+```bash
+jira-cli link-types
+jira-cli link-types --search block --json
+jira-cli link IDM-7305 IDM-6829 --type Blocks --as blocks
+jira-cli link IDM-7305 IDM-6829 --type Blocks --as "is blocked by"
+jira-cli link --type Blocks --inward IDM-6829 --outward IDM-7305
+jira-cli links IDM-7305 --json
+jira-cli unlink 2045989
 ```
 
 **Move an issue** to another project (`POST /rest/api/3/bulk/issues/move`). Requires **`--project`**. Keeps the current issue type name unless you pass **`--type`**. Prints the new issue key on stdout (the key changes when the project changes).

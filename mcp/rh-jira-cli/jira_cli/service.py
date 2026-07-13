@@ -10,7 +10,7 @@ from jira_cli.api import JiraApiError, JiraClient
 from jira_cli.commands import edit_issue as edit_issue_cmd
 from jira_cli.commands import agenda as agenda_cmd
 from jira_cli.commands import backlog as backlog_cmd
-from jira_cli.commands import field_map as field_map_cmd
+from jira_cli.commands import issue_link as issue_link_cmd
 from jira_cli.commands import list_issues as list_issues_cmd
 from jira_cli.commands import move_issue as move_issue_cmd
 from jira_cli.commands import new_issue as new_issue_cmd
@@ -475,6 +475,91 @@ class JiraService:
             msg = err.getvalue().strip() or "backlog failed"
             raise JiraApiError(msg, status_code=None)
         return payload
+
+    def list_link_types(self, *, search: str | None = None) -> list[dict[str, Any]]:
+        """GET /rest/api/3/issueLinkType (optional name/inward/outward filter)."""
+        types = self.client.get_issue_link_types()
+        if search is not None and search.strip():
+            needle = search.strip().lower()
+            types = [
+                lt
+                for lt in types
+                if needle in str(lt.get("name") or "").lower()
+                or needle in str(lt.get("inward") or "").lower()
+                or needle in str(lt.get("outward") or "").lower()
+            ]
+        return types
+
+    def create_issue_link(
+        self,
+        *,
+        source_key: str,
+        target_key: str,
+        link_type: str,
+        as_relationship: str,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Link two issues from the source issue's perspective.
+
+        ``as_relationship`` must match the link type inward/outward label on the source
+        (e.g. ``blocks`` or ``is blocked by`` for type Blocks).
+        """
+        err = StringIO()
+        result = issue_link_cmd.create_issue_link_between(
+            self.client,
+            source_key=source_key,
+            target_key=target_key,
+            link_type_name=link_type,
+            as_relationship=as_relationship,
+            comment=comment,
+            err=err,
+        )
+        if result is None:
+            msg = err.getvalue().strip() or "create_issue_link failed"
+            raise JiraApiError(msg, status_code=None)
+        return result
+
+    def create_issue_link_explicit(
+        self,
+        *,
+        link_type: str,
+        inward_issue_key: str,
+        outward_issue_key: str,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        """POST /rest/api/3/issueLink with explicit inward/outward issue keys."""
+        err = StringIO()
+        result = issue_link_cmd.create_issue_link(
+            self.client,
+            link_type_name=link_type,
+            inward_issue_key=inward_issue_key,
+            outward_issue_key=outward_issue_key,
+            comment=comment,
+            err=err,
+        )
+        if result is None:
+            msg = err.getvalue().strip() or "create_issue_link failed"
+            raise JiraApiError(msg, status_code=None)
+        return result
+
+    def delete_issue_link(self, link_id: str) -> dict[str, Any]:
+        """DELETE /rest/api/3/issueLink/{linkId}."""
+        err = StringIO()
+        ok = issue_link_cmd.delete_issue_link(self.client, link_id, err=err)
+        if not ok:
+            msg = err.getvalue().strip() or "delete_issue_link failed"
+            raise JiraApiError(msg, status_code=None)
+        return {"ok": True, "link_id": link_id.strip()}
+
+    def list_issue_links(self, issue_key: str) -> dict[str, Any]:
+        """Issue links on one ticket (compact rows)."""
+        links = issue_link_cmd.fetch_issue_links(self.client, issue_key)
+        rows = [
+            issue_link_cmd.summarize_issue_link(link, perspective_key=issue_key)
+            for link in links
+        ]
+        return {"issue_key": issue_key, "links": rows}
 
     def move_issue(
         self,

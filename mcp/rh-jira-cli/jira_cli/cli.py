@@ -10,7 +10,7 @@ from jira_cli.api import JiraApiError, JiraClient
 from jira_cli.config import ConfigError, load_settings
 from jira_cli.commands import agenda as agenda_cmd
 from jira_cli.commands import backlog as backlog_cmd
-from jira_cli.commands import edit_issue as edit_issue_cmd
+from jira_cli.commands import issue_link as issue_link_cmd
 from jira_cli.commands import field_map as field_map_cmd
 from jira_cli.commands import list_issues as list_issues_cmd
 from jira_cli.commands import move_issue as move_issue_cmd
@@ -509,6 +509,52 @@ def _cmd_backlog(client: JiraClient, settings, args: argparse.Namespace) -> int:
     )
 
 
+def _cmd_link_types(client: JiraClient, _settings, args: argparse.Namespace) -> int:
+    return issue_link_cmd.run_link_types(
+        client,
+        search=getattr(args, "search", None),
+        as_json=args.json,
+        out=sys.stdout,
+        err=sys.stderr,
+    )
+
+
+def _cmd_link(client: JiraClient, _settings, args: argparse.Namespace) -> int:
+    return issue_link_cmd.run_link_create(
+        client,
+        source_key=getattr(args, "source_key", None),
+        target_key=getattr(args, "target_key", None),
+        link_type_name=args.type,
+        as_relationship=getattr(args, "as_relationship", None),
+        inward_issue_key=getattr(args, "inward_issue", None),
+        outward_issue_key=getattr(args, "outward_issue", None),
+        comment=getattr(args, "comment", None),
+        as_json=args.json,
+        out=sys.stdout,
+        err=sys.stderr,
+    )
+
+
+def _cmd_unlink(client: JiraClient, _settings, args: argparse.Namespace) -> int:
+    return issue_link_cmd.run_link_delete(
+        client,
+        link_id=args.link_id,
+        as_json=args.json,
+        out=sys.stdout,
+        err=sys.stderr,
+    )
+
+
+def _cmd_links(client: JiraClient, _settings, args: argparse.Namespace) -> int:
+    return issue_link_cmd.run_links_list(
+        client,
+        issue_key=args.issue_key,
+        as_json=args.json,
+        out=sys.stdout,
+        err=sys.stderr,
+    )
+
+
 def _cmd_move(client: JiraClient, _settings, args: argparse.Namespace) -> int:
     return move_issue_cmd.run_move(
         client,
@@ -552,7 +598,7 @@ def _cmd_sprints(client: JiraClient, _settings, args: argparse.Namespace) -> int
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="jira-cli",
-        description="Jira REST CLI: list/show issues, agenda, fields/field-map, edit, move, transitions, sprints.",
+        description="Jira REST CLI: list/show issues, agenda, backlog, fields/field-map, edit, link, move, transitions, sprints.",
     )
 
     sub = p.add_subparsers(dest="command", required=True)
@@ -1331,6 +1377,78 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pm.add_argument("--json", action="store_true", help="Print move result as JSON")
     pm.set_defaults(handler=_cmd_move, issue_type=None)
+
+    plt = sub.add_parser("link-types", help="List Jira issue link types")
+    plt.add_argument(
+        "--search",
+        metavar="TEXT",
+        help="Filter by type name or inward/outward label (case-insensitive substring)",
+    )
+    plt.add_argument("--json", action="store_true", help="JSON array of link types")
+    plt.set_defaults(handler=_cmd_link_types, search=None)
+
+    plk = sub.add_parser(
+        "link",
+        help="Create an issue link (POST /rest/api/3/issueLink)",
+    )
+    plk.add_argument(
+        "source_key",
+        nargs="?",
+        help="Source issue key when using SOURCE TARGET --as (relationship from source)",
+    )
+    plk.add_argument(
+        "target_key",
+        nargs="?",
+        help="Target issue key when using SOURCE TARGET --as",
+    )
+    plk.add_argument(
+        "--type",
+        required=True,
+        metavar="NAME",
+        help='Link type name, e.g. Blocks, Relates',
+    )
+    plk.add_argument(
+        "--as",
+        dest="as_relationship",
+        metavar="RELATIONSHIP",
+        help=(
+            "Relationship label on SOURCE toward TARGET "
+            '(e.g. "blocks" or "is blocked by" for Blocks)'
+        ),
+    )
+    plk.add_argument(
+        "--inward",
+        dest="inward_issue",
+        metavar="KEY",
+        help="Explicit inward issue key (alternative to SOURCE TARGET --as)",
+    )
+    plk.add_argument(
+        "--outward",
+        dest="outward_issue",
+        metavar="KEY",
+        help="Explicit outward issue key (alternative to SOURCE TARGET --as)",
+    )
+    plk.add_argument("--comment", help="Optional comment on the link")
+    plk.add_argument("--json", action="store_true", help="JSON result")
+    plk.set_defaults(
+        handler=_cmd_link,
+        source_key=None,
+        target_key=None,
+        as_relationship=None,
+        inward_issue=None,
+        outward_issue=None,
+        comment=None,
+    )
+
+    plu = sub.add_parser("unlink", help="Delete an issue link by id")
+    plu.add_argument("link_id", help="Issue link id from jira-cli links")
+    plu.add_argument("--json", action="store_true", help="JSON result")
+    plu.set_defaults(handler=_cmd_unlink)
+
+    pls = sub.add_parser("links", help="List issue links on a ticket")
+    pls.add_argument("issue_key", help="Issue key, e.g. PROJ-123")
+    pls.add_argument("--json", action="store_true", help="JSON: issue_key + links[]")
+    pls.set_defaults(handler=_cmd_links)
 
     pt = sub.add_parser("transitions", help="List transitions for an issue")
     pt.add_argument("issue_key")

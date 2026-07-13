@@ -476,6 +476,24 @@ class JiraClient:
             raise JiraApiError(f"GET /rest/api/3/bulk/queue/{task_id} returned unexpected payload")
         return data
 
+    def get_issue_link_types(self) -> list[dict[str, Any]]:
+        """GET /rest/api/3/issueLinkType — available issue link types."""
+        data = self.request("GET", "/rest/api/3/issueLinkType")
+        if not isinstance(data, dict):
+            raise JiraApiError("GET /rest/api/3/issueLinkType returned unexpected payload")
+        values = data.get("issueLinkTypes")
+        if not isinstance(values, list):
+            return []
+        return [row for row in values if isinstance(row, dict)]
+
+    def create_issue_link(self, payload: dict[str, Any]) -> None:
+        """POST /rest/api/3/issueLink."""
+        self.request("POST", "/rest/api/3/issueLink", json_body=payload)
+
+    def delete_issue_link(self, link_id: str) -> None:
+        """DELETE /rest/api/3/issueLink/{linkId}."""
+        self.request("DELETE", f"/rest/api/3/issueLink/{link_id.strip()}")
+
 
 def _plain_text_to_adf(text: str) -> dict[str, Any]:
     paragraphs = text.split("\n\n") if "\n\n" in text else [text]

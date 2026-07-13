@@ -271,6 +271,58 @@ def main() -> None:
         )
 
     @mcp.tool()
+    def jira_list_link_types(search: str | None = None) -> list[dict[str, Any]]:
+        """Available issue link types (GET /rest/api/3/issueLinkType). Optional substring filter."""
+        return get_svc().list_link_types(search=search)
+
+    @mcp.tool()
+    def jira_create_issue_link(
+        source_key: str,
+        target_key: str,
+        link_type: str,
+        as_relationship: str,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Link two issues (POST /rest/api/3/issueLink).
+
+        ``as_relationship`` is the label shown on ``source_key`` toward ``target_key``
+        (e.g. ``blocks`` or ``is blocked by`` for type Blocks).
+        """
+        return get_svc().create_issue_link(
+            source_key=source_key,
+            target_key=target_key,
+            link_type=link_type,
+            as_relationship=as_relationship,
+            comment=comment,
+        )
+
+    @mcp.tool()
+    def jira_create_issue_link_explicit(
+        link_type: str,
+        inward_issue_key: str,
+        outward_issue_key: str,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        """Create an issue link with explicit inward/outward issue keys (POST /rest/api/3/issueLink)."""
+        return get_svc().create_issue_link_explicit(
+            link_type=link_type,
+            inward_issue_key=inward_issue_key,
+            outward_issue_key=outward_issue_key,
+            comment=comment,
+        )
+
+    @mcp.tool()
+    def jira_delete_issue_link(link_id: str) -> dict[str, Any]:
+        """Delete an issue link by id (DELETE /rest/api/3/issueLink/{linkId})."""
+        return get_svc().delete_issue_link(link_id)
+
+    @mcp.tool()
+    def jira_list_issue_links(issue_key: str) -> dict[str, Any]:
+        """List issue links on a ticket (compact rows with link id and relationship)."""
+        return get_svc().list_issue_links(issue_key)
+
+    @mcp.tool()
     def jira_move_issue(
         issue_key: str,
         project: str,
