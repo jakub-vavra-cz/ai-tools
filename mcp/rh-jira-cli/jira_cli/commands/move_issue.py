@@ -59,6 +59,29 @@ def resolve_project_issuetype_id(
     return None
 
 
+def build_bulk_move_payload(
+    *,
+    target_project: str,
+    issuetype_id: str,
+    issue_key: str,
+) -> dict[str, Any]:
+    """Build POST /rest/api/3/bulk/issues/move body for a single issue."""
+    mapping_key = f"{target_project},{issuetype_id}"
+    return {
+        # True: suppressing notifications requires a Jira admin permission most users lack.
+        "sendBulkNotification": True,
+        "targetToSourcesMapping": {
+            mapping_key: {
+                "issueIdsOrKeys": [issue_key],
+                "inferClassificationDefaults": True,
+                "inferFieldDefaults": True,
+                "inferStatusDefaults": True,
+                "inferSubtaskTypeDefault": True,
+            }
+        },
+    }
+
+
 def _wait_for_bulk_task(
     client: JiraClient,
     task_id: str,
@@ -148,19 +171,11 @@ def execute_move_issue(
     if issuetype_id is None:
         return None, 1
 
-    mapping_key = f"{target_project},{issuetype_id}"
-    payload = {
-        "sendBulkNotification": False,
-        "targetToSourcesMapping": {
-            mapping_key: {
-                "issueIdsOrKeys": [key],
-                "inferClassificationDefaults": True,
-                "inferFieldDefaults": True,
-                "inferStatusDefaults": True,
-                "inferSubtaskTypeDefault": True,
-            }
-        },
-    }
+    payload = build_bulk_move_payload(
+        target_project=target_project,
+        issuetype_id=issuetype_id,
+        issue_key=key,
+    )
 
     try:
         submitted = client.bulk_move_issues(payload)
