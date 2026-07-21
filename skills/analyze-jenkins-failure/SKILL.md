@@ -217,9 +217,19 @@ Inspect `metadata.yaml` init steps for **sibling repo clones** (`../sssd`, `../s
 cd ~/git/@TESTRUNS/${CAMPAIGN}/twd
 te --upto prep metadata.yaml      # provision cloud VMs
 te --phase test metadata.yaml     # first test run — no clean-twd
-# On re-run after fixes:
+# On re-run after fixes (hosts still up):
 clean-twd && te --phase test metadata.yaml
-te --phase teardown metadata.yaml # release hosts when done
+```
+
+**Do not teardown automatically** when the test phase has failures or errors (`pytest-run.rc` ≠ 0, failed/errored cases in junit, or a non-zero `te --phase test` exit). Leave the provisioned hosts up so the next iteration can re-run with `clean-twd && te --phase test` without provisioning again.
+
+Teardown only when:
+
+- All targeted tests **passed**, or
+- The user explicitly asks to release hosts / abandon the campaign
+
+```bash
+te --phase teardown metadata.yaml   # only after pass or explicit request
 ```
 
 Re-run only the failing pytest args from metadata (`pytest-mh:` / `pytests:` `args:`) when iterating.
@@ -243,7 +253,8 @@ State blockers explicitly.
 3. Download **junit**, **runner.log**, **metadata.mod.yaml** (+ phase-specific logs)
 4. **Diagnose** — phase, tests, classification
 5. **Reproduce** — `@TESTRUNS` + `te` when metadata is available and user wants a re-run
-6. **Report** — summary, artifacts link, reproduction commands run or suggested
+6. **Keep hosts** on test failure/error — skip teardown; only teardown after pass or explicit user request
+7. **Report** — summary, artifacts link, reproduction commands run or suggested
 
 Run independent fetches (console + artifact files) in parallel when possible.
 
@@ -270,4 +281,5 @@ Run independent fetches (console + artifact files) in parallel when possible.
 
 ### Reproduction
 {commands or "blocked because …"}
+{If tests failed/errored: note hosts left up — no teardown; next run is clean-twd + te --phase test}
 ```

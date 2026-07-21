@@ -8,6 +8,13 @@ requires-python = ">=3.10"
 [project.scripts]
 clean-twd = "ai_tools.clean_twd:main"
 pull-jenkins-artifacts = "ai_tools.jenkins_artifacts:main"
+check-ansible = "ai_tools.check_ansible:main"
+dump-polarion-testcase = "ai_tools.dump_polarion_testcase:main"
+import-jira-testcase = "ai_tools.import_jira_testcase:main"
+scan-python-testcase = "ai_tools.scan_python_testcase:main"
+
+[project.optional-dependencies]
+polarion-yaml = ["PyYAML>=6"]
 
 [build-system]
 requires = ["setuptools>=61"]

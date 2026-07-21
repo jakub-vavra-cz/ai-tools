@@ -11,6 +11,21 @@ description: >-
 
 # Ansible edits: yamllint and syntax-check
 
+## CLI helper (`check-ansible`)
+
+Prefer the packaged runner from `ai-tools/tools` when available — it encodes this
+skill’s gate (yamllint, dual-stack syntax-check / ansible-lint, deprecations):
+
+```bash
+pip install -e /path/to/ai-tools/tools   # once
+check-ansible path/to/changed.yml
+check-ansible path/to/playbook.yml -i inventory.yml
+check-ansible path/to/tasks.yml --skip-uvx -q
+```
+
+See `tools/README.md` for flags (`--ansible-version`, `--json`, skip switches).
+When the CLI is not installed, run the manual steps below.
+
 ## Before running any check
 
 Do **not** assume default CLI flags until you have checked the repo. Discover how this project expects Ansible linting to run, then invoke tools so they pick up that configuration.
