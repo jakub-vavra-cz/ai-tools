@@ -65,6 +65,7 @@ See [tools/README.md](tools/README.md).
 
 | Skill | Purpose |
 |-------|---------|
+| `about-idmci` | Answer IdM-CI conceptual/how-to questions from docs-idmci (`~/git/idmcidoc-fork-main`, [docs-idmci](https://gitlab.cee.redhat.com/identity-management/docs-idmci)); topic map in `skills/about-idmci/reference.md` |
 | `agenda` | Daily work agenda from worklog, git-stats, and jira-cli MCP tools |
 | `analyze-jenkins-failure` | Debug IdM-CI Jenkins jobs from a build URL (console → `RD_JR_ARTIFACTS_URL` → logs + `metadata.mod.yaml` → reproduction) |
 | `backlog` | Backlog tickets for estimation and sprint planning via jira-cli MCP |
