@@ -58,6 +58,7 @@ pip install -e /path/to/ai-tools/tools
 | `clean-twd` | Clean IdM-CI `twd` artifacts before test re-execution |
 | `pull-jenkins-artifacts` | Fetch Jenkins console + IdM-CI twd artifacts from the artifact server |
 | `check-ansible` | yamllint + dual-stack ansible syntax-check / ansible-lint |
+| `dump-polarion-testcase` / `import-jira-testcase` / `scan-python-testcase` / `beetlejuice` | Polarion ↔ Jira RHELTEST Test Case helpers |
 
 See [tools/README.md](tools/README.md).
 

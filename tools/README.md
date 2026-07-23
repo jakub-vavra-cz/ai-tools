@@ -21,6 +21,7 @@ pip install -e /path/to/ai-tools/tools
 | `dump-polarion-testcase` | Fetch a Polarion testcase via REST API and dump it as `key=value` |
 | `import-jira-testcase` | Import a jira-format dump into RHELTEST (match by ID, then summary) |
 | `scan-python-testcase` | Scan local Python tests (Betelgeuse-style) into jira-format dumps |
+| `beetlejuice` | Import Betelgeuse Polarion XML to Jira (`test-case`; `test-run` planned) |
 
 ### clean-twd
 
@@ -151,6 +152,52 @@ import-jira-testcase /tmp/sssd-dumps/<id>.properties --dry-run
 
 Optional: PyYAML when reading `--polarion-config` / auto-discovered
 `polarion.yaml`.
+
+### beetlejuice
+
+Betelgeuse-shaped CLI for Polarion importer XML → Jira RHELTEST:
+
+| Subcommand | Status | Input |
+|------------|--------|--------|
+| `test-case` | implemented | `import-testcase.xml` (Betelgeuse / IdM-CI) |
+| `test-run` | planned | `import-testrun.xml` |
+
+`test-case` maps each `<testcase>` through the same Polarion→Jira path as
+`dump-polarion-testcase` / `import-jira-testcase`. Accepts a local XML file
+(plain or gzip), a directory of such files, or an http(s) URL to the XML or
+the `polarion/` directory listing. Gzipped IdM artifact uploads are
+decompressed automatically.
+
+| XML | Dump / Jira |
+|-----|-------------|
+| `@id` (or `testCaseID` custom field) | `ID` (`customfield_10591`) |
+| `title` | `summary` |
+| `status-id` | `status` (same mapping as dump-polarion) |
+| `casecomponent` | `components` |
+| `subsystemteam` (`sst_idm_*` → `rhel-idm-*`) | `AssignedTeam` |
+| `tags` / `upstream` / `customerscenario` | `labels` |
+| `automation_script` if http(s), else `testscript` hyperlink | `URL` |
+| description + setup + test-steps + other fields | `description` (HTML) |
+
+Requires `-o` and/or `--import`. Import needs `JIRA_URL`, `JIRA_EMAIL`,
+`JIRA_API_TOKEN` (same as `import-jira-testcase`).
+
+```bash
+# Dump only (from local XML or polarion/ dir)
+beetlejuice test-case /path/to/import-testcase.xml -o /tmp/bj-dumps
+beetlejuice test-case /path/to/polarion/ -o /tmp/bj-dumps
+
+# From IdM artifacts URL (directory listing or direct XML)
+beetlejuice test-case 'https://idm-artifacts…/polarion/' -o /tmp/bj-dumps --limit 5
+beetlejuice test-case 'https://idm-artifacts…/polarion/import-testcase.xml' -o /tmp/bj-dumps
+
+# Push to stage Jira (dry-run first)
+export JIRA_URL=https://stage-redhat.atlassian.net
+export JIRA_EMAIL=<you@redhat.com>
+export JIRA_API_TOKEN=<token>
+beetlejuice test-case /path/to/import-testcase.xml --import -n --skip-assignee --skip-components
+beetlejuice test-case /path/to/import-testcase.xml --import --skip-assignee --team rhel-idm-sssd --tier 1
+```
 
 ### import-jira-testcase
 

@@ -1,0 +1,23 @@
+<testcases project-id="RHEL_IDM"><properties>
+    <property name="dry-run" value="False" />
+    <property name="lookup-method" value="name" />
+  </properties>
+  <testcase id="IDM-SSSD-TC: sanity: initscript: chkconfig Operations">
+    <title>IDM-SSSD-TC: sanity: initscript: chkconfig Operations</title>
+    <description>IDM-SSSD-TC: sanity: initscript: chkconfig Operations</description>
+    <custom-fields>
+    <custom-field content="automated" id="caseautomation" />
+    <custom-field content="sssd" id="casecomponent" />
+    <custom-field content="rhel-idm-sssd" id="subsystemteam" />
+    </custom-fields>
+  <hyperlinks><hyperlink uri="https://gitlab.cee.redhat.com/sssd/sssd-qe/tree/main/client/sanity" role-id="testscript" /></hyperlinks><linked-work-items><linked-work-item lookup-method="id" role-id="verifies" workitem-id="IDM-31539" /></linked-work-items></testcase>
+  <testcase id="IDM-SSSD-TC: sanity: initscript: Verify Start Service">
+    <title>IDM-SSSD-TC: sanity: initscript: Verify Start Service</title>
+    <description>IDM-SSSD-TC: sanity: initscript: Verify Start Service</description>
+    <custom-fields>
+    <custom-field content="automated" id="caseautomation" />
+    <custom-field content="sssd" id="casecomponent" />
+    <custom-field content="rhel-idm-sssd" id="subsystemteam" />
+    </custom-fields>
+  <hyperlinks><hyperlink uri="https://gitlab.cee.redhat.com/sssd/sssd-qe/tree/main/client/sanity" role-id="testscript" /></hyperlinks><linked-work-items><linked-work-item lookup-method="id" role-id="verifies" workitem-id="IDM-31539" /></linked-work-items></testcase>
+  </testcases>

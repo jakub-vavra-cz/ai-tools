@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "CLI helpers from the ai-tools repository"
 readme = "README.md"
 requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+]
 
 [project.scripts]
 clean-twd = "ai_tools.clean_twd:main"
@@ -12,6 +15,7 @@ check-ansible = "ai_tools.check_ansible:main"
 dump-polarion-testcase = "ai_tools.dump_polarion_testcase:main"
 import-jira-testcase = "ai_tools.import_jira_testcase:main"
 scan-python-testcase = "ai_tools.scan_python_testcase:main"
+beetlejuice = "ai_tools.beetlejuice:main"
 
 [project.optional-dependencies]
 polarion-yaml = ["PyYAML>=6"]

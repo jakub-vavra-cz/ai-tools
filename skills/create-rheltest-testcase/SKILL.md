@@ -138,6 +138,13 @@ dump-polarion-testcase -P RHEL_IDM -i RHEL-130263 -o /tmp/tc.properties
 import-jira-testcase /tmp/tc.properties --skip-assignee
 ```
 
+From Betelgeuse / IdM-CI Polarion artifact XML (`import-testcase.xml`):
+
+```bash
+beetlejuice test-case /path/to/polarion/ -o /tmp/bj-dumps
+beetlejuice test-case /path/to/import-testcase.xml --import --skip-assignee -n
+```
+
 ## Related issue types in RHELTEST
 
 Also available on stage (not covered by this skill): Bug, Epic, Story, Sub-task, Task, **Test Result** (`10237`).
