@@ -16,9 +16,11 @@ Each MCP package has its own `README.md` with install steps and Cursor `mcp.json
 
 ### git-worktrees
 
-Automates cloning SSSD-related forks with upstream remotes and creating topic branches in new git worktrees
+Automates cloning SSSD-related forks with upstream remotes and creating topic branches in new git worktrees; can refresh the main clone and clean up worktrees once merged upstream.
 
-- Console entry: `git-worktrees-mcp`
+- CLI: `git-worktrees` (`list-repos`, `create`, `refresh`, `cleanup`)
+- Console entry (MCP): `git-worktrees-mcp`
+- MCP tools: `list_repos`, `create_worktree_branch`, `worktree_refresh`, `worktree_cleanup`
 - See [mcp/git-worktrees/README.md](mcp/git-worktrees/README.md)
 
 ### git-stats

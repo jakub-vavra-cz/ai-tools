@@ -1,8 +1,8 @@
-# git-worktrees (MCP)
+# git-worktrees (MCP + CLI)
 
-Python **Model Context Protocol** server that automates the same flow as a local `branch_w.sh` helper: ensure your **fork** is cloned with an **upstream** remote under `GIT_PATH`, **fetch**, create a **new branch in a new worktree** from an upstream ref, then **`git push -u origin`**.
+Python **Model Context Protocol** server (and CLI) that automates the same flow as a local `branch_w.sh` helper: ensure your **fork** is cloned with an **upstream** remote under `GIT_PATH`, **fetch**, create a **new branch in a new worktree** from an upstream ref, then **`git push -u origin`**. Also supports **refreshing** the main clone and **cleaning up** topic worktrees once their changes are merged upstream.
 
-Use it from Cursor (or any MCP client) so an agent can open a topic branch without you running shell steps by hand.
+Use it from Cursor (or any MCP client) so an agent can open or remove a topic branch without you running shell steps by hand.
 
 ## Requirements
 
@@ -19,7 +19,10 @@ python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
 
-The console entry point is **`git-worktrees-mcp`** (stdio MCP).
+Console entry points:
+
+- **`git-worktrees-mcp`** — stdio MCP server
+- **`git-worktrees`** — CLI (`list-repos`, `create`, `refresh`, `cleanup`)
 
 ## Cursor / MCP client
 
@@ -44,16 +47,29 @@ Equivalent using the module:
 
 Restart the MCP client after changing env vars or `repos.ini`.
 
-## Tools
+## Tools (MCP)
 
 | Tool | Purpose |
 |------|--------|
 | **`list_repos`** | Returns `git_path`, path to the active **`repos.ini`**, and per-repo metadata (default branch, clone directory name, worktree prefix, resolved main clone path). |
 | **`create_worktree_branch`** | `repo`, `new_branch`, optional `source_branch`. Ensures the main clone exists, fetches, adds the worktree from `upstream/<source>`, pushes the new branch to `origin`. Response includes per-step git output or structured errors. |
+| **`worktree_refresh`** | `repo`. Checkout default branch on the main clone, `git pull -r upstream`, force-push `origin`. |
+| **`worktree_cleanup`** | `repo`, `branch`, optional `force`. Fetches, verifies the topic branch is merged into upstream (exact or cherry-equivalent), then deletes `origin/<branch>`, removes the worktree, and deletes the local branch. Stops if not merged. Warns and stops on uncommitted changes unless `force=true` (force does **not** bypass the merge check). |
 
-**Two-argument behaviour:** omit `source_branch` to branch off the repo’s configured **default** upstream branch (for example `master` or `main`).
+**Two-argument behaviour (create):** omit `source_branch` to branch off the repo’s configured **default** upstream branch (for example `master` or `main`).
 
-**Three-argument behaviour:** set `source_branch` to branch off `upstream/<source_branch>` instead.
+**Three-argument behaviour (create):** set `source_branch` to branch off `upstream/<source_branch>` instead.
+
+## CLI
+
+```bash
+git-worktrees list-repos
+git-worktrees create IDMCI my_feature [source_branch]
+git-worktrees refresh IDMCI
+git-worktrees cleanup IDMCI my_feature          # refuse if dirty or not merged
+git-worktrees cleanup IDMCI my_feature --force  # allow dirty worktree; still requires merge
+git-worktrees cleanup IDMCI my_feature --json
+```
 
 ## Environment variables
 

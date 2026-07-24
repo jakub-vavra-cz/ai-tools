@@ -1,4 +1,4 @@
-"""MCP server mirroring branch_w.sh worktree + push workflow."""
+"""MCP/CLI mirroring branch_w.sh worktree + push + cleanup workflow."""
 
 __all__ = ["__version__"]
 
