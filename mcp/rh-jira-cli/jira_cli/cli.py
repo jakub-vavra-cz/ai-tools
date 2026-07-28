@@ -10,6 +10,7 @@ from jira_cli.api import JiraApiError, JiraClient
 from jira_cli.config import ConfigError, load_settings
 from jira_cli.commands import agenda as agenda_cmd
 from jira_cli.commands import backlog as backlog_cmd
+from jira_cli.commands import edit_issue as edit_issue_cmd
 from jira_cli.commands import issue_link as issue_link_cmd
 from jira_cli.commands import field_map as field_map_cmd
 from jira_cli.commands import list_issues as list_issues_cmd
@@ -229,6 +230,7 @@ def _cmd_edit(client: JiraClient, settings, args: argparse.Namespace) -> int:
     comment_idx = getattr(args, "comment_idx", None)
     delete_comment_idx = getattr(args, "delete_comment_idx", None)
     transition = args.transition
+    resolution = getattr(args, "resolution", None)
     assignee_email = getattr(args, "assignee_email", None)
     assignee_clear = bool(getattr(args, "assignee_clear", False))
     reporter_email = getattr(args, "reporter_email", None)
@@ -238,6 +240,7 @@ def _cmd_edit(client: JiraClient, settings, args: argparse.Namespace) -> int:
     duedate = getattr(args, "duedate", None)
     clear_due = bool(getattr(args, "clear_due", False))
     severity = getattr(args, "severity", None)
+    vex_justification = getattr(args, "vex_justification", None)
     team = getattr(args, "team", None)
     preliminary_testing = getattr(args, "preliminary_testing", None)
     test_coverage = getattr(args, "test_coverage", None)
@@ -289,6 +292,7 @@ def _cmd_edit(client: JiraClient, settings, args: argparse.Namespace) -> int:
             comment_idx is not None,
             delete_comment_idx is not None,
             transition is not None,
+            resolution is not None,
             assignee_clear,
             assignee_email is not None,
             reporter_clear,
@@ -298,6 +302,7 @@ def _cmd_edit(client: JiraClient, settings, args: argparse.Namespace) -> int:
             duedate is not None,
             clear_due,
             severity is not None,
+            vex_justification is not None,
             team is not None,
             preliminary_testing is not None,
             test_coverage is not None,
@@ -359,12 +364,14 @@ def _cmd_edit(client: JiraClient, settings, args: argparse.Namespace) -> int:
                 comment,
                 delete_comment_idx,
                 transition,
+                resolution,
                 assignee_email,
                 reporter_email,
                 priority_name,
                 issuetype_name,
                 duedate,
                 severity,
+                vex_justification,
                 team,
                 preliminary_testing,
                 test_coverage,
@@ -419,6 +426,7 @@ def _cmd_edit(client: JiraClient, settings, args: argparse.Namespace) -> int:
         comment_idx=comment_idx,
         delete_comment_idx=delete_comment_idx,
         transition=transition,
+        resolution=resolution,
         refresh_sprint_cache=getattr(args, "refresh_sprint_cache", False),
         assignee_email=assignee_email,
         assignee_clear=assignee_clear,
@@ -435,6 +443,7 @@ def _cmd_edit(client: JiraClient, settings, args: argparse.Namespace) -> int:
         fixed_in_build=fixed_in_build,
         test_link=test_link,
         git_pull_request=git_pull_request,
+        vex_justification=vex_justification,
         developer_email=developer_email,
         developer_clear=developer_clear,
         qa_contact_email=qa_contact_email,
@@ -569,12 +578,25 @@ def _cmd_move(client: JiraClient, _settings, args: argparse.Namespace) -> int:
 
 def _cmd_transitions(client: JiraClient, _settings, args: argparse.Namespace) -> int:
     try:
-        data = client.get_transitions(args.issue_key)
+        data = client.get_transitions(
+            args.issue_key,
+            expand_fields=bool(getattr(args, "expand_fields", False)),
+        )
     except JiraApiError as e:
         print(e, file=sys.stderr)
         return 1
     for t in data.get("transitions") or []:
-        print(f"{t.get('id')}\t{t.get('name')}")
+        line = f"{t.get('id')}\t{t.get('name')}"
+        fields = t.get("fields") or {}
+        if fields:
+            parts = []
+            for fid, meta in fields.items():
+                name = (meta or {}).get("name") or fid
+                req = "required" if (meta or {}).get("required") else "optional"
+                parts.append(f"{name} ({req})")
+            if parts:
+                line += "\t" + "; ".join(parts)
+        print(line)
     return 0
 
 
@@ -1081,6 +1103,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Workflow transition name or numeric id",
     )
     pe.add_argument(
+        "--resolution",
+        metavar="NAME",
+        help=(
+            'Resolution display name for closing transitions (e.g. "Not a Bug"); '
+            "requires --transition (sent on the transition screen, not a normal field edit)"
+        ),
+    )
+    pe.add_argument(
         "--assignee-email",
         metavar="EMAIL",
         help="Set assignee via user search (same account as show --short assignee line)",
@@ -1128,6 +1158,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--severity",
         metavar="VALUE",
         help='Custom field "Severity" (option or text per site)',
+    )
+    pe.add_argument(
+        "--vex-justification",
+        metavar="VALUE",
+        help=(
+            'Custom field "VEX Justification" (option, e.g. "Component not Present"); '
+            "with --transition, sent on the transition screen"
+        ),
     )
     pe.add_argument(
         "--team",
@@ -1452,6 +1490,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pt = sub.add_parser("transitions", help="List transitions for an issue")
     pt.add_argument("issue_key")
+    pt.add_argument(
+        "--expand-fields",
+        action="store_true",
+        help="Include transition screen fields (e.g. required Resolution on Closed)",
+    )
     pt.set_defaults(handler=_cmd_transitions)
 
     ps = sub.add_parser("sprints", help="List sprints for a project board")

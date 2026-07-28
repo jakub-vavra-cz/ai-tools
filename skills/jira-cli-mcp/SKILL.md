@@ -3,9 +3,10 @@ name: jira-cli-mcp
 description: >-
   Uses the rh-jira-cli MCP (Jira Cloud REST) via call_mcp_tool: search, fetch issues,
   list transitions, update fields, add comments, and apply workflow transitions with
-  correct parameter names. Use when the user mentions Jira, IDM-, RHEL tickets,
-  jira-cli, jira MCP, transitions, or wants issues updated from the agent without
-  shell jira-cli.
+  correct parameter names. Prefer skills/jira-cli-mcp/reference.md for IDM/RHEL
+  issue types and transition names instead of fetching transitions each time.
+  Use when the user mentions Jira, IDM-, RHEL tickets, jira-cli, jira MCP,
+  transitions, or wants issues updated from the agent without shell jira-cli.
 ---
 
 # jira-cli MCP
@@ -26,13 +27,35 @@ The tool schema matches the jira-cli edit surface. **Unknown keys are ignored** 
 
 | Goal | Correct argument | Wrong (ignored) |
 |------|-------------------|-----------------|
-| Move workflow | `transition` — transition **name** (e.g. `"Review"`, `"In Progress"`) or id string (e.g. `"51"`) | `transition_id` |
+| Move workflow | `transition` — transition **name** (e.g. `"Review"`, `"In Progress"`, `"Closed"`) or id string (e.g. `"51"`) | `transition_id` |
+| Close with resolution | `transition: "Closed"` **and** `resolution: "Not a Bug"` (or another allowed resolution name) | setting `Resolution` alone via `field_pairs` without `transition` |
+| VEX Justification | `vex_justification: "Component not Present"` (option value); with a closing transition it is sent on the transition screen | — |
 | Add comment | `comment` — plain string | — |
 | Issue key | `issue_key` | `issue` |
 
-**Always use `transition`, never `transition_id`.** If the user asks to set status, call `jira_get_transitions` with `issue_key`, pick the transition `name` from the response, then `jira_update_issue` with `transition: "<name>"`.
+**Always use `transition`, never `transition_id`.**
 
-You may set **`comment`** and **`transition`** in the same `jira_update_issue` call when both are needed.
+For **IDM** and **RHEL**, read [reference.md](reference.md) first (issue types, transition names, Closed screen fields, resolutions, VEX options). Pick the transition **name** from that map and call `jira_update_issue` — do **not** call `jira_get_transitions` on every status change.
+
+Call `jira_get_transitions` only when:
+
+- the project is not IDM/RHEL, or the issue type is not covered in the reference;
+- a transition from the reference fails (guards, renamed workflow);
+- you need live screen field metadata beyond what the reference lists.
+
+You may set **`comment`**, **`transition`**, **`resolution`**, and **`vex_justification`** in the same `jira_update_issue` call when closing.
+
+Example close:
+
+```json
+{
+  "issue_key": "RHEL-217423",
+  "comment": "Only logsrvd is affected; not packaged for RHEL.",
+  "transition": "Closed",
+  "resolution": "Not a Bug",
+  "vex_justification": "Component not Present"
+}
+```
 
 ---
 
@@ -56,8 +79,10 @@ Calling with empty or unusable combinations can error with: *Provide TERM, one o
 
 ## `jira_get_transitions`
 
-- Argument: **`issue_key`** only.
+- Argument: **`issue_key`** (required).
+- Optional: **`expand_fields: true`** — include each transition's screen fields (e.g. required Resolution on Closed, optional VEX Justification). Prefer CLI `jira-cli transitions KEY --expand-fields` if the MCP tool omits expand.
 - Returns `transitions[]` with `id`, `name`, and target `to.name` (status). Use **`name`** for `transition` on update unless you standardize on ids.
+- For IDM/RHEL day-to-day work, prefer [reference.md](reference.md) instead of this tool.
 
 ---
 
@@ -74,16 +99,18 @@ Uses **`transition`** (not `transition_id`) for an initial transition after crea
 1. `jira_search` with `jql` matching summary/project text.
 2. `jira_get_issue` with `issue_key` for details.
 
-**Hand off for review with MR link**
+**Hand off for review with MR link (IDM)**
 
-1. `jira_get_transitions` → confirm `"Review"` (or local equivalent) exists.
-2. `jira_update_issue` with `issue_key`, `comment: "<MR URL>"`, `transition: "Review"` (one call if supported; else comment then transition).
+1. Confirm `"Review"` in [reference.md](reference.md) (IDM workflow).
+2. `jira_update_issue` with `issue_key`, `comment: "<MR URL>"`, `transition: "Review"`.
 
-**Change status only**
+**Change status (IDM / RHEL)**
 
-- `jira_update_issue` with `issue_key` and `transition: "<exact transition name>"`.
+1. Look up the target transition name in [reference.md](reference.md).
+2. `jira_update_issue` with `issue_key` and `transition: "<exact transition name>"`.
+3. For **Closed**, also pass required `resolution` (and `vex_justification` for RHEL Vulnerability when applicable) — see reference Closed screens.
 
-If transition fails (workflow guard), try an intermediate transition from `jira_get_transitions` (e.g. **In Progress** then **Review**).
+If a transition fails, call `jira_get_transitions` for that issue and retry with a name from the live response (or an intermediate step if the workflow is no longer fully global).
 
 ---
 
@@ -110,7 +137,9 @@ If transition fails (workflow guard), try an intermediate transition from `jira_
 }
 ```
 
-Third example is **`jira_get_transitions`** — same `issue_key` pattern as **`jira_get_issue`**.
+Third example is **`jira_get_transitions`** (fallback only for IDM/RHEL) — same `issue_key` pattern as **`jira_get_issue`**.
+
+See [reference.md](reference.md) for IDM/RHEL transition maps and Closed-field recipes.
 
 ---
 

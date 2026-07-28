@@ -274,8 +274,16 @@ class JiraService:
             return [{"id": f.get("id"), "name": f.get("name")} for f in rows]
         return rows
 
-    def get_transitions(self, issue_key: str) -> dict[str, Any]:
-        return self.client.get_transitions(issue_key)
+    def get_transitions(
+        self,
+        issue_key: str,
+        *,
+        expand_fields: bool = False,
+    ) -> dict[str, Any]:
+        return self.client.get_transitions(
+            issue_key,
+            expand_fields=expand_fields,
+        )
 
     def list_sprints(
         self,
@@ -307,6 +315,7 @@ class JiraService:
         comment_idx: int | None = None,
         delete_comment_idx: int | None = None,
         transition: str | None = None,
+        resolution: str | None = None,
         refresh_sprint_cache: bool = False,
         assignee_email: str | None = None,
         assignee_clear: bool = False,
@@ -323,6 +332,7 @@ class JiraService:
         fixed_in_build: str | None = None,
         test_link: str | None = None,
         git_pull_request: str | None = None,
+        vex_justification: str | None = None,
         developer_email: str | None = None,
         developer_clear: bool = False,
         qa_contact_email: str | None = None,
@@ -366,6 +376,7 @@ class JiraService:
             comment_idx=comment_idx,
             delete_comment_idx=delete_comment_idx,
             transition=transition,
+            resolution=resolution,
             refresh_sprint_cache=refresh_sprint_cache,
             assignee_email=assignee_email,
             assignee_clear=assignee_clear,
@@ -382,6 +393,7 @@ class JiraService:
             fixed_in_build=fixed_in_build,
             test_link=test_link,
             git_pull_request=git_pull_request,
+            vex_justification=vex_justification,
             developer_email=developer_email,
             developer_clear=developer_clear,
             qa_contact_email=qa_contact_email,

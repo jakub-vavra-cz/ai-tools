@@ -74,7 +74,7 @@ See [tools/README.md](tools/README.md).
 | `analyze-jenkins-failure` | Debug IdM-CI Jenkins jobs from a build URL (console → `RD_JR_ARTIFACTS_URL` → logs + `metadata.mod.yaml` → reproduction) |
 | `backlog` | Backlog tickets for estimation and sprint planning via jira-cli MCP |
 | `is-merged` | Whether a local branch/worktree tip is already on upstream (`is-merged` CLI) |
-| `jira-cli-mcp` | Jira issue search, updates, and transitions via the jira-cli MCP |
+| `jira-cli-mcp` | Jira issue search, updates, and transitions via the jira-cli MCP (IDM/RHEL transition map in `skills/jira-cli-mcp/reference.md`) |
 | `review-changes` | Clone a PR/MR, lint changed files, and review diff quality |
 | `run-python-static-code-analysis` | Lint and format Python edits using project-configured tools |
 | `run-sssd-tests-idmci` | IdM-CI / @TESTRUNS multihost tests (`~/git/@TESTRUNS`, `twd/metadata.yaml`, `te`); pytest-mh and in-repo pytest |

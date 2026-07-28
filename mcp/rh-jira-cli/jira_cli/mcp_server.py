@@ -170,6 +170,8 @@ def main() -> None:
         description: str | None = None,
         comment: str | None = None,
         transition: str | None = None,
+        resolution: str | None = None,
+        vex_justification: str | None = None,
         sprint: str | None = None,
         story_points: float | None = None,
         assignee_email: str | None = None,
@@ -190,6 +192,10 @@ def main() -> None:
         Update fields / comments / sprint / transition like ``jira-cli edit``.
         field_pairs: entries ``KEY=VALUE`` resolved like ``--field`` (applied without extra prompt).
         Empty VALUE clears user-picker fields (e.g. ``QA Contact=``).
+
+        ``resolution`` requires ``transition`` (e.g. Closed) and is sent on the transition
+        screen. ``vex_justification`` sets "VEX Justification"; with a transition it is
+        included in the transition fields.
         """
         return get_svc().update_issue(
             issue_key,
@@ -198,6 +204,8 @@ def main() -> None:
             description=description,
             comment=comment,
             transition=transition,
+            resolution=resolution,
+            vex_justification=vex_justification,
             sprint=sprint,
             story_points=story_points,
             assignee_email=assignee_email,
@@ -356,9 +364,17 @@ def main() -> None:
         )
 
     @mcp.tool()
-    def jira_get_transitions(issue_key: str) -> dict[str, Any]:
-        """Workflow transitions available for the issue."""
-        return get_svc().get_transitions(issue_key)
+    def jira_get_transitions(
+        issue_key: str,
+        expand_fields: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Workflow transitions available for the issue.
+
+        When ``expand_fields`` is true, each transition includes its screen fields
+        (e.g. required Resolution on Closed, optional VEX Justification).
+        """
+        return get_svc().get_transitions(issue_key, expand_fields=expand_fields)
 
     @mcp.tool()
     def jira_list_sprints(

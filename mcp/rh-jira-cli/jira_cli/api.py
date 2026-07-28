@@ -254,14 +254,35 @@ class JiraClient:
     def delete_comment(self, issue_key: str, comment_id: str) -> None:
         self.request("DELETE", f"/rest/api/3/issue/{issue_key}/comment/{comment_id}")
 
-    def get_transitions(self, issue_key: str) -> dict[str, Any]:
-        return self.request("GET", f"/rest/api/3/issue/{issue_key}/transitions")
+    def get_transitions(
+        self,
+        issue_key: str,
+        *,
+        expand_fields: bool = False,
+    ) -> dict[str, Any]:
+        params: dict[str, str] | None = None
+        if expand_fields:
+            params = {"expand": "transitions.fields"}
+        return self.request(
+            "GET",
+            f"/rest/api/3/issue/{issue_key}/transitions",
+            params=params,
+        )
 
-    def transition_issue(self, issue_key: str, transition_id: str) -> None:
+    def transition_issue(
+        self,
+        issue_key: str,
+        transition_id: str,
+        *,
+        fields: dict[str, Any] | None = None,
+    ) -> None:
+        body: dict[str, Any] = {"transition": {"id": transition_id}}
+        if fields:
+            body["fields"] = fields
         self.request(
             "POST",
             f"/rest/api/3/issue/{issue_key}/transitions",
-            json_body={"transition": {"id": transition_id}},
+            json_body=body,
         )
 
     def boards_for_project(

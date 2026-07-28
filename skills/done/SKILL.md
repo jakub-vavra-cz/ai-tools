@@ -112,16 +112,29 @@ Use MCP server **`user-jira-cli`**, tool **`jira_search`**. Read the tool schema
 
 ### Fetch today's Jira activity
 
-Search for issues you touched today:
+Search for issues **you updated** today (comments, transitions, field edits — not only assignee):
 
 ```json
 {
-  "jql": "assignee = currentUser() AND updated >= startOfDay() ORDER BY updated DESC",
+  "jql": "updatedBy = currentUser() AND updated >= startOfDay() ORDER BY updated DESC",
   "max_results": 30
 }
 ```
 
+Do **not** use `assignee = currentUser()` here — that misses tickets you commented on, closed, or otherwise changed while someone else is assignee (or after you unassigned yourself).
+
 When the user asks about a specific project or sprint, add filters to the JQL (e.g. `AND project = IDM`).
+
+For a past day (`activity_date` / `YYYY-MM-DD`), use a closed date range instead of `startOfDay()`:
+
+```json
+{
+  "jql": "updatedBy = currentUser() AND updated >= \"YYYY-MM-DD\" AND updated < \"YYYY-MM-DD+1 day\" ORDER BY updated DESC",
+  "max_results": 30
+}
+```
+
+(Example: for `2026-07-27`, use `updated >= "2026-07-27" AND updated < "2026-07-28"`.)
 
 Do **not** call `jira_agenda` for this section — that lists open sprint tickets (forward-looking), not today's activity.
 
@@ -173,7 +186,7 @@ Open with a one-paragraph **Summary** synthesizing the three sections (repos/com
 
 Keep each section short. If a source returned nothing, say "None" rather than omitting the section. If a tool failed (auth, network), say which source and the error in one line.
 
-When `activity_date` or a past day is requested, pass it to `git_stats_done` and use `worklog_workspace_activity` with `workday` instead of `worklog_workspace_today`.
+When `activity_date` or a past day is requested, pass it to `git_stats_done`, use `worklog_workspace_activity` with `workday` instead of `worklog_workspace_today`, and use the past-day `updatedBy` JQL date range above for Jira.
 
 ---
 
@@ -183,7 +196,7 @@ When `activity_date` or a past day is requested, pass it to `git_stats_done` and
 Done progress:
 - [ ] worklog_workspace_today fetched
 - [ ] git_stats_done fetched
-- [ ] jira_search fetched (today's tickets)
+- [ ] jira_search fetched (updatedBy today / past day)
 - [ ] Summary paragraph written
 - [ ] Report assembled
 ```

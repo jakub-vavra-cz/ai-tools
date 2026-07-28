@@ -35,6 +35,7 @@ _CF_TEST_COVERAGE = "Test Coverage"
 _CF_TEST_LINK = "Test Link"
 _CF_GIT_PULL_REQUEST = "Git Pull Request"
 _CF_ASSIGNED_TEAM = "AssignedTeam"
+_CF_VEX_JUSTIFICATION = "VEX Justification"
 
 
 def resolve_story_points_field_id(client: JiraClient) -> str | None:
@@ -360,6 +361,7 @@ def apply_common_field_updates_to_dict(
     fixed_in_build: str | None = None,
     test_link: str | None = None,
     git_pull_request: str | None = None,
+    vex_justification: str | None = None,
     developer_email: str | None = None,
     developer_clear: bool = False,
     qa_contact_email: str | None = None,
@@ -383,6 +385,7 @@ def apply_common_field_updates_to_dict(
             fixed_in_build,
             test_link,
             git_pull_request,
+            vex_justification,
             developer_email,
             qa_contact_email,
             doc_contact_email,
@@ -486,6 +489,11 @@ def apply_common_field_updates_to_dict(
 
     if severity is not None and str(severity).strip():
         rc = _put_cf(_CF_SEVERITY, None, str(severity).strip())
+        if rc != 0:
+            return rc
+
+    if vex_justification is not None and str(vex_justification).strip():
+        rc = _put_cf(_CF_VEX_JUSTIFICATION, None, str(vex_justification).strip())
         if rc != 0:
             return rc
 
@@ -655,6 +663,14 @@ def _preview_new_value(field_id: str, coerced: Any) -> str:
     return s if len(s) <= 200 else s[:197] + "…"
 
 
+def coerce_resolution_value(raw: str) -> dict[str, str] | None:
+    """Normalize a resolution display name for transition ``fields.resolution``."""
+    name = raw.strip()
+    if not name:
+        return None
+    return {"name": name}
+
+
 def coerce_payload_for_field_update(
     field_def: dict[str, Any] | None,
     field_id: str,
@@ -675,6 +691,12 @@ def coerce_payload_for_field_update(
         return {"name": raw.strip()}
     if field_id == "issuetype":
         return {"name": raw.strip()}
+    if field_id == "resolution":
+        coerced = coerce_resolution_value(raw)
+        if coerced is None:
+            print("resolution value must be a non-empty name (e.g. Not a Bug).", file=err)
+            return None
+        return coerced
     if field_id == "parent":
         parent_key = raw.strip()
         if not parent_key:
@@ -695,10 +717,91 @@ def coerce_payload_for_field_update(
             print("duedate value must be YYYY-MM-DD.", file=err)
             return None
         return ds
+    schema = (field_def or {}).get("schema") or {}
+    if (schema.get("type") or "").lower() == "resolution":
+        coerced = coerce_resolution_value(raw)
+        if coerced is None:
+            print("resolution value must be a non-empty name (e.g. Not a Bug).", file=err)
+            return None
+        return coerced
     if field_def:
         return _coerce_custom_field_value(field_def, raw, client=client, err=err)
     print(f"jira-cli edit: cannot coerce value for field {field_id!r}.", file=err)
     return None
+
+
+def _normalize_resolution_for_transition(
+    value: Any,
+    err: TextIO,
+) -> dict[str, str] | None:
+    """Accept a display name string or ``{\"name\": …}`` / ``{\"id\": …}`` dict."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        coerced = coerce_resolution_value(value)
+        if coerced is None:
+            print("resolution value must be a non-empty name (e.g. Not a Bug).", file=err)
+        return coerced
+    if isinstance(value, dict):
+        if value.get("name") or value.get("id"):
+            return {k: str(v) for k, v in value.items() if k in ("name", "id") and v}
+        print(
+            'resolution value must be {"name": "…"} or {"id": "…"} (or a display name string).',
+            file=err,
+        )
+        return None
+    print(f"resolution value has unsupported type {type(value).__name__}.", file=err)
+    return None
+
+
+def split_transition_screen_fields(
+    batch_fields: dict[str, Any],
+    *,
+    transition: str | None,
+    resolution: str | None,
+    vex_field_id: str | None,
+    err: TextIO,
+) -> tuple[dict[str, Any], int]:
+    """
+    Move transition-screen fields out of the PUT payload into a transition ``fields`` dict.
+
+    Resolution cannot be set via issue edit on open issues; it must ride on the workflow
+    transition (e.g. Closed). VEX Justification may be set either way; when transitioning,
+    prefer the transition payload so Closed-screen updates succeed in one call.
+    """
+    transition_fields: dict[str, Any] = {}
+
+    if "resolution" in batch_fields:
+        if not transition:
+            print(
+                "Resolution can only be set together with --transition "
+                '(e.g. --transition Closed --resolution "Not a Bug").',
+                file=err,
+            )
+            return {}, 2
+        res = _normalize_resolution_for_transition(batch_fields.pop("resolution"), err)
+        if res is None:
+            return {}, 2
+        transition_fields["resolution"] = res
+
+    if resolution is not None and str(resolution).strip():
+        if not transition:
+            print(
+                "Resolution can only be set together with --transition "
+                '(e.g. --transition Closed --resolution "Not a Bug").',
+                file=err,
+            )
+            return {}, 2
+        res = coerce_resolution_value(str(resolution))
+        if res is None:
+            print("resolution value must be a non-empty name (e.g. Not a Bug).", file=err)
+            return {}, 2
+        transition_fields["resolution"] = res
+
+    if vex_field_id and vex_field_id in batch_fields and transition:
+        transition_fields[vex_field_id] = batch_fields.pop(vex_field_id)
+
+    return transition_fields, 0
 
 
 def parse_edit_field_args(items: list[str], err: TextIO) -> list[tuple[str, str]] | None:
@@ -818,6 +921,7 @@ def apply_edit(
     comment_idx: int | None = None,
     delete_comment_idx: int | None = None,
     transition: str | None = None,
+    resolution: str | None = None,
     refresh_sprint_cache: bool = False,
     assignee_email: str | None = None,
     assignee_clear: bool = False,
@@ -834,6 +938,7 @@ def apply_edit(
     fixed_in_build: str | None = None,
     test_link: str | None = None,
     git_pull_request: str | None = None,
+    vex_justification: str | None = None,
     developer_email: str | None = None,
     developer_clear: bool = False,
     qa_contact_email: str | None = None,
@@ -875,6 +980,7 @@ def apply_edit(
         fixed_in_build=fixed_in_build,
         test_link=test_link,
         git_pull_request=git_pull_request,
+        vex_justification=vex_justification,
         developer_email=developer_email,
         developer_clear=developer_clear,
         qa_contact_email=qa_contact_email,
@@ -890,6 +996,22 @@ def apply_edit(
 
     if additional_fields:
         batch_fields.update(additional_fields)
+
+    vex_field_id = None
+    if transition:
+        vex_field_id = resolve_custom_field_key_by_display_name(
+            client,
+            _CF_VEX_JUSTIFICATION,
+        )
+    transition_fields, rc = split_transition_screen_fields(
+        batch_fields,
+        transition=transition,
+        resolution=resolution,
+        vex_field_id=vex_field_id,
+        err=err,
+    )
+    if rc != 0:
+        return rc
 
     if batch_fields:
         try:
@@ -981,9 +1103,19 @@ def apply_edit(
     if transition:
         tid = resolve_transition_id(client, issue_key, transition)
         try:
-            client.transition_issue(issue_key, tid)
+            client.transition_issue(
+                issue_key,
+                tid,
+                fields=transition_fields or None,
+            )
         except JiraApiError as e:
             print_jira_api_error(e, err, message="Failed to transition")
             return 1
+    elif transition_fields:
+        print(
+            "Internal error: transition fields set without a transition.",
+            file=err,
+        )
+        return 2
 
     return 0

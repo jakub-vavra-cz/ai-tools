@@ -152,6 +152,8 @@ jira-cli edit PROJ-123 --comment "Verified on build 99"
 jira-cli edit PROJ-123 --comment-idx 0 --comment "Edited: verified on build 100"
 jira-cli edit PROJ-123 --delete-comment-idx 1
 jira-cli edit PROJ-123 --transition "In Progress"
+jira-cli edit PROJ-123 --transition Closed --resolution "Not a Bug" \
+  --vex-justification "Component not Present" --comment "Not shipped in RHEL"
 jira-cli edit PROJ-123 --no-input --story-points 3   # fail if you omit flags by mistake in scripts
 ```
 
@@ -208,6 +210,7 @@ jira-cli fields -s '^customfield_10' --regex
 
 ```bash
 jira-cli transitions PROJ-123
+jira-cli transitions PROJ-123 --expand-fields   # show screen fields (Resolution, VEX Justification, …)
 jira-cli sprints PROJ
 ```
 
