@@ -61,6 +61,7 @@ pip install -e /path/to/ai-tools/tools
 | `pull-jenkins-artifacts` | Fetch Jenkins console + IdM-CI twd artifacts from the artifact server |
 | `check-ansible` | yamllint + dual-stack ansible syntax-check / ansible-lint |
 | `dump-polarion-testcase` / `import-jira-testcase` / `scan-python-testcase` / `beetlejuice` | Polarion ↔ Jira RHELTEST Test Case helpers |
+| `is-merged` | Check whether a local tip is already on upstream |
 
 See [tools/README.md](tools/README.md).
 
@@ -72,6 +73,7 @@ See [tools/README.md](tools/README.md).
 | `agenda` | Daily work agenda from worklog, git-stats, and jira-cli MCP tools |
 | `analyze-jenkins-failure` | Debug IdM-CI Jenkins jobs from a build URL (console → `RD_JR_ARTIFACTS_URL` → logs + `metadata.mod.yaml` → reproduction) |
 | `backlog` | Backlog tickets for estimation and sprint planning via jira-cli MCP |
+| `is-merged` | Whether a local branch/worktree tip is already on upstream (`is-merged` CLI) |
 | `jira-cli-mcp` | Jira issue search, updates, and transitions via the jira-cli MCP |
 | `review-changes` | Clone a PR/MR, lint changed files, and review diff quality |
 | `run-python-static-code-analysis` | Lint and format Python edits using project-configured tools |

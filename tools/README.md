@@ -22,6 +22,7 @@ pip install -e /path/to/ai-tools/tools
 | `import-jira-testcase` | Import a jira-format dump into RHELTEST (match by ID, then summary) |
 | `scan-python-testcase` | Scan local Python tests (Betelgeuse-style) into jira-format dumps |
 | `beetlejuice` | Import Betelgeuse Polarion XML to Jira (`test-case`; `test-run` planned) |
+| `is-merged` | Check whether a local tip is already on upstream (ancestor / cherry / patch-id) |
 
 ### clean-twd
 
@@ -223,6 +224,20 @@ import-jira-testcase /tmp/tc.properties --dry-run
 import-jira-testcase /tmp/tc.properties --skip-assignee --skip-components
 import-jira-testcase /tmp/tc.properties --json
 ```
+
+### is-merged
+
+Checks whether a local tip is already on an upstream remote ref (exact
+ancestor, tip/branch ``git cherry``, subject hits, optional tip patch-id
+scan). Used by the [is-merged](../skills/is-merged/SKILL.md) skill.
+
+```bash
+is-merged ~/git/sf-SSSD-8151 --fetch
+is-merged . --ref topic --upstream upstream/main --deep --json
+is-merged /path/to/worktree --no-origin
+```
+
+Exit `0` when merged, `1` when not, `2` on error.
 
 ## Tests
 
