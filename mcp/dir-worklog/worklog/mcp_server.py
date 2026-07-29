@@ -12,9 +12,12 @@ from worklog.service import last_workday_result, workspace_activity
 
 def _require_mcp() -> Any:
     try:
-        from mcp.server.fastmcp import FastMCP
+        from fastmcp import FastMCP
     except ImportError as exc:
-        print("Install the MCP extra: pip install 'worklog[mcp]'", file=sys.stderr)
+        print(
+            "Requires fastmcp: pip install 'worklog[mcp]'",
+            file=sys.stderr,
+        )
         raise SystemExit(1) from exc
     return FastMCP
 

@@ -55,7 +55,7 @@ git-stats-mcp
 
 #### uvx
 
-`uvx` installs `git-stats` and the `mcp` extra into an isolated tool env on first use. Re-run with `uvx --refresh ...` after upstream changes.
+`uvx` installs `git-stats` and the `mcp` extra (`fastmcp>=2`) into an isolated tool env on first use. Re-run with `uvx --refresh ...` after upstream changes.
 
 **Local checkout** — adjust the path to your clone:
 

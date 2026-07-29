@@ -84,6 +84,8 @@ Skills live under `skills/<name>/SKILL.md`. Cursor loads them from `~/git/.curso
 
 ## Install (MCP via uvx)
 
+These servers use the standalone **[FastMCP](https://gofastmcp.com)** package (`from fastmcp import FastMCP`). That avoids the official MCP Python SDK 2.x break (SDK 2 removed `mcp.server.fastmcp`).
+
 Typical Cursor `~/.cursor/mcp.json` entries install from this repo (adjust host/path as needed):
 
 ```json
@@ -95,7 +97,7 @@ Typical Cursor `~/.cursor/mcp.json` entries install from this repo (adjust host/
         "--from",
         "git+https://github.com/jakub-vavra-cz/ai-tools#subdirectory=mcp/rh-jira-cli",
         "--with",
-        "mcp>=1.0",
+        "fastmcp>=2",
         "jira-cli-mcp"
       ]
     },
@@ -105,7 +107,7 @@ Typical Cursor `~/.cursor/mcp.json` entries install from this repo (adjust host/
         "--from",
         "git+https://github.com/jakub-vavra-cz/ai-tools#subdirectory=mcp/git-worktrees",
         "--with",
-        "mcp>=1.0",
+        "fastmcp>=2",
         "git-worktrees-mcp"
       ],
       "env": {
@@ -137,5 +139,7 @@ Typical Cursor `~/.cursor/mcp.json` entries install from this repo (adjust host/
   }
 }
 ```
+
+`worklog` / `git-stats` pull `fastmcp` via the `[mcp]` extra. `jira-cli` / `git-worktrees` also pass `--with fastmcp>=2` so older package revisions still get a compatible FastMCP. After changing deps, reload MCP in Cursor (or `uvx --refresh ...`).
 
 For local development, install editable from each package directory instead (see per-package READMEs).

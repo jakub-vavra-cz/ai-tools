@@ -13,10 +13,10 @@ from jira_cli.service import JiraService
 
 def _require_mcp() -> Any:
     try:
-        from mcp.server.fastmcp import FastMCP
+        from fastmcp import FastMCP
     except ImportError as e:
         print(
-            "Install the MCP extra: pip install 'jira-cli[mcp]'",
+            "Requires fastmcp: pip install 'jira-cli[mcp]'",
             file=sys.stderr,
         )
         raise SystemExit(1) from e

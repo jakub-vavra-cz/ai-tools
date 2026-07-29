@@ -14,9 +14,12 @@ from git_worktrees_mcp.operations import worktree_refresh as run_worktree_refres
 
 def _require_fastmcp() -> Any:
     try:
-        from mcp.server.fastmcp import FastMCP
+        from fastmcp import FastMCP
     except ImportError as e:
-        print("Install dependencies: pip install -e .", file=sys.stderr)
+        print(
+            "Requires fastmcp: pip install -e .",
+            file=sys.stderr,
+        )
         raise SystemExit(1) from e
     return FastMCP
 

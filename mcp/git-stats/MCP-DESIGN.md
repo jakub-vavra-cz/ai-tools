@@ -94,7 +94,7 @@ No `tools/*.json` descriptors — tools are registered via `@mcp.tool()` only (s
 Dependencies:
 
 - **CLI:** stdlib + subprocess (`gh`, `glab`).
-- **MCP extra:** `mcp>=1.0`.
+- **MCP extra:** `fastmcp>=2` (`from fastmcp import FastMCP`).
 
 ### `pyproject.toml` scripts
 
@@ -112,7 +112,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.0"]
+mcp = ["fastmcp>=2"]
 repos = ["ruff>=0.1.0", "pytest>=7.0", "flake8>=6.0"]
 
 [project.scripts]

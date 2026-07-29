@@ -12,9 +12,12 @@ from git_stats.service import queue_fetch, review_queue
 
 def _require_fastmcp() -> Any:
     try:
-        from mcp.server.fastmcp import FastMCP
+        from fastmcp import FastMCP
     except ImportError as exc:
-        print("Install the MCP extra: pip install 'git-stats[mcp]'", file=sys.stderr)
+        print(
+            "Requires fastmcp: pip install 'git-stats[mcp]'",
+            file=sys.stderr,
+        )
         raise SystemExit(1) from exc
     return FastMCP
 

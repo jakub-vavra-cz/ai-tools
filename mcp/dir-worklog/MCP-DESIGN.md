@@ -64,7 +64,7 @@ worklog/
     worklog_last_workday.json
 ```
 
-Dependencies: `mcp>=1.0` (MCP extra only); scanning uses stdlib (`pathlib`, `subprocess` for `git`).
+Dependencies: `fastmcp>=2` (MCP extra only; `from fastmcp import FastMCP`); scanning uses stdlib (`pathlib`, `subprocess` for `git`).
 
 ### `pyproject.toml` scripts
 
@@ -74,7 +74,7 @@ worklog = "worklog.cli:main"
 worklog-mcp = "worklog.mcp_server:main"
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.0"]
+mcp = ["fastmcp>=2"]
 ```
 
 ---

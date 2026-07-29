@@ -14,13 +14,14 @@ Run as `jira-cli` or `python -m jira_cli`.
 
 ## MCP server (Cursor, Claude Desktop, …)
 
-Install the optional extra, then run the stdio server (same `JIRA_*` environment variables as the CLI):
+Install the optional extra (`fastmcp>=2`), then run the stdio server (same `JIRA_*` environment variables as the CLI):
 
 ```bash
 pip install 'jira-cli[mcp]'
 jira-cli-mcp
 ```
 
+For Cursor `uvx`, pass `--with fastmcp>=2` (see the [repo root README](../../README.md#install-mcp-via-uvx)).
 The server sets `JIRA_CLI_NO_INPUT=1` by default. Tools mirror the CLI: `jira_list_mine`, `jira_list_for_email`, `jira_search`, `jira_get_issue`, `jira_create_issue`, `jira_update_issue`, `jira_agenda`, `jira_backlog`, `jira_list_link_types`, `jira_create_issue_link`, `jira_create_issue_link_explicit`, `jira_delete_issue_link`, `jira_list_issue_links`, `jira_move_issue`, `jira_list_fields`, `jira_get_transitions`, `jira_list_sprints`.
 
 For programmatic use without MCP, import `JiraService` from `jira_cli.service` (structured dict/list results, no argparse).

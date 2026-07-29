@@ -9,6 +9,7 @@ Use it from Cursor (or any MCP client) so an agent can open or remove a topic br
 - **Git** on `PATH`.
 - **SSH** (or whatever your fork remotes use) configured for `git@github.com` / `git@gitlab.cee.redhat.com` as in your `fork_template` URLs.
 - **Python 3.10+**.
+- **[FastMCP](https://gofastmcp.com)** (`fastmcp>=2`; `from fastmcp import FastMCP`).
 
 ## Install
 
@@ -33,6 +34,28 @@ Run the server over stdio. Example configuration (adjust paths):
   "mcpServers": {
     "git-worktrees": {
       "command": "/home/you/git/ai-tools/mcp/git-worktrees/.venv/bin/git-worktrees-mcp"
+    }
+  }
+}
+```
+
+Or with `uvx` from this repo (see the [repo root README](../../README.md#install-mcp-via-uvx)):
+
+```json
+{
+  "mcpServers": {
+    "git-worktrees": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/jakub-vavra-cz/ai-tools#subdirectory=mcp/git-worktrees",
+        "--with",
+        "fastmcp>=2",
+        "git-worktrees-mcp"
+      ],
+      "env": {
+        "GIT_PATH": "/home/you/git"
+      }
     }
   }
 }
