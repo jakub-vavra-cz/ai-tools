@@ -3,11 +3,13 @@ name: run-sssd-tests-idmci
 description: >-
   Runs SSSD and related multihost tests via IdM-CI: @TESTRUNS campaigns under
   ~/git/@TESTRUNS/<name>/twd, job metadata.yaml, and `te` (provision with --upto prep,
-  test with --phase test, teardown with --phase teardown). Uses `clean-twd` on test
-  re-runs only to clear stale twd artifacts; reads junit/logs for diagnosis. Also covers
-  pytest-mh / sssd-test-framework and in-repo pytest when not using cloud provision.
-  Use for @TESTRUNS, twd, idm-ci, metadata.yaml, mrack, clean-twd, or SSSD/sudo
-  system tests.
+  test with --phase test, teardown with --phase teardown). For provider: aws, requires
+  a valid Kerberos TGT and `aws-saml.py --region=us-east-1 --role 099686300931-poweruser
+  --sessionduration 14400` before provision. Uses `clean-twd` on test re-runs only to
+  clear stale twd artifacts; reads junit/logs for diagnosis. Also covers pytest-mh /
+  sssd-test-framework and in-repo pytest when not using cloud provision. Use for
+  @TESTRUNS, twd, idm-ci, metadata.yaml, mrack, clean-twd, AWS/OpenStack provision, or
+  SSSD/sudo system tests.
 ---
 
 # Run SSSD tests (IdM-CI)
@@ -89,6 +91,8 @@ Adapt from a similar campaign under `~/git/@TESTRUNS/` or from `idm-ci/metadata/
 mkdir -p ~/git/@TESTRUNS/<campaign>/twd
 # Write twd/metadata.yaml (domains + phases) — see idm-ci docs above
 # Clone sibling test repos beside twd when metadata references ../sudo-tests, ../sssd, etc.
+# If metadata uses provider: aws — ensure valid Kerberos TGT, then:
+#   aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400
 
 cd ~/git/@TESTRUNS/<campaign>/twd
 te --upto prep metadata.yaml         # provision: init → allocate cloud VMs → prep SUTs
@@ -117,10 +121,30 @@ This runs phases through **`prep`** inclusive:
 | Phase | What happens |
 |-------|----------------|
 | **init** | Creates `twd/config/`, copies metadata, SSH keys, mrack config |
-| **provision** | Allocates VMs in OpenStack/Beaker via mrack (`provision/mrack-up.yaml`, `provision/wait.yaml`) |
+| **provision** | Allocates VMs via mrack (`provision/mrack-up.yaml`, `provision/wait.yaml`) — OpenStack, Beaker, or AWS depending on metadata |
 | **prep** | Installs packages, configures domains, runs playbooks on live hosts |
 
 After `--upto prep` succeeds, `config/test.inventory.yaml` and `config/pytest-mh.yaml` reflect the live topology — run **`te --phase test metadata.yaml`** (no `clean-twd` on the first run). Check `mrack.log` and `runner.log` if provision or prep fails; do not run the test phase until inventory is populated.
+
+#### AWS provider prerequisites (`provider: aws`)
+
+When job metadata uses **`provider: aws`** (in `domains` / mrack config), provision will fail without AWS credentials. Before `te --upto prep` (or any phase that provisions):
+
+1. **Valid Kerberos TGT** — you must already have a valid ticket-granting ticket (`klist` shows a non-expired TGT). Renew or obtain one if needed (`kinit`).
+2. **Assume the AWS role via SAML** — run:
+
+```bash
+aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400
+```
+
+That writes short-lived AWS credentials (valid for the given session duration, here 4 hours). Re-run `aws-saml.py` if credentials expire mid-campaign.
+3. **Verify identity** — confirm credentials work before provision:
+
+```bash
+aws sts get-caller-identity
+```
+
+Do not start AWS provision until the TGT, `aws-saml.py`, and `get-caller-identity` succeed.
 
 ### Clean artifacts on test re-runs (`clean-twd`)
 
@@ -384,10 +408,10 @@ Summarize:
 
 ## Order of operations
 
-1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](https://docs-idmci.psi.redhat.com/user_docs/guide.html#_job_metadata_basics)). Provision with `te --upto prep metadata.yaml` if hosts are not up. Diagnose prior runs from junit/logs first.
+1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](https://docs-idmci.psi.redhat.com/user_docs/guide.html#_job_metadata_basics)). If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400` before provision. Provision with `te --upto prep metadata.yaml` if hosts are not up. Diagnose prior runs from junit/logs first.
 2. **Discover** other test entry points (in-repo, then CI).
 3. **Scope** to the user’s change or named test.
-4. **Prepare** — venv, build dir, `te --upto prep` (cloud provision), or local containers as required.
+4. **Prepare** — venv, build dir, AWS creds when needed, `te --upto prep` (cloud provision), or local containers as required.
 5. **Re-run?** — If tests already ran in this `twd`, **`clean-twd`** before the next test phase (install: `pip install -e ~/git/ai-tools/tools`). Skip on first test pass after provision.
 6. **Run** the narrowest relevant command.
 7. **Diagnose** failures; fix or report blockers.
