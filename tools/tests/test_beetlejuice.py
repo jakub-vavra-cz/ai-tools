@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,15 +10,18 @@ from ai_tools.beetlejuice import (
     apply_dump_overrides,
     dump_filename_for_id,
     find_local_testcase_xmls,
+    jira_config_from_env,
     map_sst_team,
     maybe_decompress,
     parse_directory_index_for_testcase_xmls,
     parse_testcase_xml,
     pairs_to_jira_dump,
     process_cases,
+    project_key_from_env,
     read_xml_bytes,
 )
 from ai_tools.dump_polarion_testcase import parse_key_value_file
+from ai_tools.import_jira_testcase import JiraError
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "beetlejuice"
 
@@ -28,6 +32,76 @@ class MapTeamTests(unittest.TestCase):
         self.assertEqual(map_sst_team("sst_idm"), "rhel-idm")
         self.assertEqual(map_sst_team("rhel-idm-sssd"), "rhel-idm-sssd")
         self.assertEqual(map_sst_team("other"), "other")
+
+
+class IdmciJiraEnvTests(unittest.TestCase):
+    def test_project_key_from_env(self) -> None:
+        with patch.dict("os.environ", {}, clear=False):
+            for key in ("IDMCI_JIRA_PROJECT",):
+                os.environ.pop(key, None)
+            self.assertEqual(project_key_from_env(), "RHELTEST")
+        with patch.dict("os.environ", {"IDMCI_JIRA_PROJECT": " MYPROJ "}):
+            self.assertEqual(project_key_from_env(), "MYPROJ")
+
+    def test_jira_config_prefers_idmci(self) -> None:
+        env = {
+            "IDMCI_JIRA_URL": "https://idmci.example/",
+            "IDMCI_JIRA_EMAIL": "idmci@example.com",
+            "IDMCI_JIRA_API_TOKEN": "idmci-token",
+            "JIRA_URL": "https://fallback.example",
+            "JIRA_EMAIL": "fallback@example.com",
+            "JIRA_API_TOKEN": "fallback-token",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            cfg = jira_config_from_env()
+        self.assertEqual(cfg.base_url, "https://idmci.example")
+        self.assertEqual(cfg.email, "idmci@example.com")
+        self.assertEqual(cfg.api_token, "idmci-token")
+
+    def test_jira_config_falls_back_to_jira(self) -> None:
+        env = {
+            "JIRA_URL": "https://fallback.example",
+            "JIRA_EMAIL": "fallback@example.com",
+            "JIRA_API_TOKEN": "fallback-token",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            for key in (
+                "IDMCI_JIRA_URL",
+                "IDMCI_JIRA_EMAIL",
+                "IDMCI_JIRA_API_TOKEN",
+            ):
+                os.environ.pop(key, None)
+            cfg = jira_config_from_env()
+        self.assertEqual(cfg.base_url, "https://fallback.example")
+        self.assertEqual(cfg.email, "fallback@example.com")
+        self.assertEqual(cfg.api_token, "fallback-token")
+
+    def test_jira_config_defaults_url(self) -> None:
+        env = {
+            "IDMCI_JIRA_EMAIL": "idmci@example.com",
+            "IDMCI_JIRA_API_TOKEN": "idmci-token",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            for key in ("IDMCI_JIRA_URL", "JIRA_URL"):
+                os.environ.pop(key, None)
+            cfg = jira_config_from_env()
+        self.assertEqual(cfg.base_url, "https://stage-redhat.atlassian.net")
+        self.assertEqual(cfg.email, "idmci@example.com")
+
+    def test_jira_config_missing(self) -> None:
+        with patch.dict("os.environ", {}, clear=False):
+            for key in (
+                "IDMCI_JIRA_URL",
+                "IDMCI_JIRA_EMAIL",
+                "IDMCI_JIRA_API_TOKEN",
+                "JIRA_URL",
+                "JIRA_EMAIL",
+                "JIRA_USER",
+                "JIRA_API_TOKEN",
+            ):
+                os.environ.pop(key, None)
+            with self.assertRaises(JiraError):
+                jira_config_from_env()
 
 
 class GzipTests(unittest.TestCase):

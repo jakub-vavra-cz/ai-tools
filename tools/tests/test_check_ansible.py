@@ -8,6 +8,7 @@ from unittest.mock import patch
 from ai_tools.check_ansible import (
     CheckReport,
     CommandResult,
+    DEFAULT_EXTRA_ANSIBLE_PIN,
     find_ansible_root,
     format_report,
     has_deprecation_warning,
@@ -15,6 +16,7 @@ from ai_tools.check_ansible import (
     project_uses_ansible_lint,
     relative_to_root,
     resolve_paths,
+    resolve_uvx_pins,
     uvx_ansible_lint_argv,
     uvx_ansible_playbook_argv,
 )
@@ -165,6 +167,32 @@ class UvxArgvTests(unittest.TestCase):
         self.assertEqual(argv[-1], "ansible-lint")
 
 
+class ResolveUvxPinsTests(unittest.TestCase):
+    def test_default_includes_idmci_extra(self) -> None:
+        pins = resolve_uvx_pins()
+        self.assertEqual(len(pins), 2)
+        self.assertEqual(pins[0].label, "uvx")
+        self.assertEqual(pins[0].ansible_pin, "9.13.0")
+        self.assertEqual(pins[1].label, f"uvx-{DEFAULT_EXTRA_ANSIBLE_PIN}")
+        self.assertEqual(pins[1].ansible_pin, DEFAULT_EXTRA_ANSIBLE_PIN)
+        self.assertEqual(pins[1].python, "3.12")
+
+    def test_skip_extra(self) -> None:
+        pins = resolve_uvx_pins(include_extra=False)
+        self.assertEqual(len(pins), 1)
+        self.assertEqual(pins[0].label, "uvx")
+
+    def test_dedupes_when_extra_matches_primary(self) -> None:
+        pins = resolve_uvx_pins(
+            ansible_pin="8.7.0",
+            extra_ansible_pin="8.7.0",
+            python="3.12",
+            extra_python="3.12",
+        )
+        self.assertEqual(len(pins), 1)
+        self.assertEqual(pins[0].ansible_pin, "8.7.0")
+
+
 class CommandResultOkTests(unittest.TestCase):
     def test_fail_on_deprecation_even_if_exit_zero(self) -> None:
         result = CommandResult(
@@ -271,6 +299,62 @@ class CheckAnsibleIntegrationTests(unittest.TestCase):
             self.assertIn(("ansible-lint-deprecations", "system"), names)
             # Role tasks are not playbooks → no syntax-check
             self.assertNotIn("syntax-check", {n for n, _ in names})
+            self.assertTrue(report.ok)
+
+    def test_runs_extra_uvx_pin_when_enabled(self) -> None:
+        from ai_tools import check_ansible as mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "ansible"
+            root.mkdir(parents=True)
+            (root / "ansible.cfg").write_text(
+                "[defaults]\n",
+                encoding="utf-8",
+            )
+            target = root / "play.yml"
+            target.write_text(
+                "---\n- hosts: localhost\n  tasks: []\n",
+                encoding="utf-8",
+            )
+
+            seen_argv: list[list[str]] = []
+
+            def fake_run(name, stack, argv, **kwargs):
+                if argv:
+                    seen_argv.append(list(argv))
+                return CommandResult(
+                    name=name,
+                    stack=stack,
+                    argv=argv,
+                    cwd=str(kwargs.get("cwd", root)),
+                    exit_code=0,
+                    output="ok\n",
+                    skipped=kwargs.get("skipped", False),
+                    skip_reason=kwargs.get("skip_reason"),
+                )
+
+            with (
+                patch.object(mod, "run_command", side_effect=fake_run),
+                patch.object(mod, "which", return_value="/bin/fake"),
+                patch.object(
+                    mod,
+                    "capture_version",
+                    return_value="ansible 2.16",
+                ),
+            ):
+                report = mod.check_ansible(
+                    [target],
+                    ansible_root=root,
+                    skip_ansible_lint=True,
+                )
+
+            stacks = {r.stack for r in report.results if r.name == "syntax-check"}
+            self.assertIn("system", stacks)
+            self.assertIn("uvx", stacks)
+            self.assertIn(f"uvx-{DEFAULT_EXTRA_ANSIBLE_PIN}", stacks)
+            joined = " ".join(" ".join(a) for a in seen_argv)
+            self.assertIn("ansible==9.13.0", joined)
+            self.assertIn(f"ansible=={DEFAULT_EXTRA_ANSIBLE_PIN}", joined)
             self.assertTrue(report.ok)
 
 

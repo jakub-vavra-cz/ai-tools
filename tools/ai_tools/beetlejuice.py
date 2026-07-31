@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import re
 import ssl
 import xml.etree.ElementTree as ET
@@ -41,10 +42,10 @@ from ai_tools.import_jira_testcase import (
     JiraConfig,
     JiraError,
     import_testcase,
-    jira_config_from_env,
 )
 
 GZIP_MAGIC = b"\x1f\x8b"
+DEFAULT_JIRA_URL = "https://stage-redhat.atlassian.net"
 
 _HREF_RE = re.compile(
     r'href=["\']([^"\']*import-testcase\.xml)["\']',
@@ -54,6 +55,51 @@ _HREF_RE = re.compile(
 
 class BeetlejuiceError(RuntimeError):
     """Parse / download / import error."""
+
+
+def project_key_from_env() -> str:
+    """Jira project from ``IDMCI_JIRA_PROJECT``, else ``RHELTEST``."""
+    return os.environ.get("IDMCI_JIRA_PROJECT", "").strip() or DEFAULT_PROJECT
+
+
+def jira_config_from_env() -> JiraConfig:
+    """Load Jira auth for IdM-CI (``IDMCI_JIRA_*``), with ``JIRA_*`` fallback.
+
+    Preferred (standalone / IdM-CI): ``IDMCI_JIRA_URL``, ``IDMCI_JIRA_EMAIL``,
+    ``IDMCI_JIRA_API_TOKEN``. Falls back to ``JIRA_URL`` / ``JIRA_EMAIL`` (or
+    ``JIRA_USER``) / ``JIRA_API_TOKEN`` when run inside ai-tools. URL defaults
+    to stage Atlassian when unset.
+    """
+    base = (
+        (os.environ.get("IDMCI_JIRA_URL") or os.environ.get("JIRA_URL") or DEFAULT_JIRA_URL)
+        .strip()
+        .rstrip("/")
+    )
+    email = (
+        os.environ.get("IDMCI_JIRA_EMAIL")
+        or os.environ.get("JIRA_EMAIL")
+        or os.environ.get("JIRA_USER")
+        or ""
+    ).strip()
+    token = (
+        os.environ.get("IDMCI_JIRA_API_TOKEN") or os.environ.get("JIRA_API_TOKEN") or ""
+    ).strip()
+    if not email or not token:
+        raise JiraError(
+            "set IDMCI_JIRA_EMAIL and IDMCI_JIRA_API_TOKEN (or JIRA_EMAIL / JIRA_API_TOKEN)",
+        )
+    verify_raw = os.environ.get("JIRA_VERIFY_SSL", "true").strip().lower()
+    verify_ssl = verify_raw not in ("0", "false", "no", "off")
+    ca_bundle = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get(
+        "SSL_CERT_FILE",
+    )
+    return JiraConfig(
+        base_url=base,
+        email=email,
+        api_token=token,
+        verify_ssl=verify_ssl,
+        ca_bundle=ca_bundle or None,
+    )
 
 
 @dataclass
@@ -545,15 +591,14 @@ def cli() -> None:
     is_flag=True,
     help=(
         "Create/update Jira Test Cases "
-        "(requires JIRA_URL / JIRA_EMAIL / JIRA_API_TOKEN)"
+        "(requires IDMCI_JIRA_URL / IDMCI_JIRA_EMAIL / IDMCI_JIRA_API_TOKEN)"
     ),
 )
 @click.option(
     "-P",
     "--project",
-    default=DEFAULT_PROJECT,
-    show_default=True,
-    help="Jira project key",
+    default=None,
+    help=f"Jira project key (default: IDMCI_JIRA_PROJECT or {DEFAULT_PROJECT})",
 )
 @click.option(
     "--issue-type",
@@ -658,13 +703,14 @@ def test_case_cmd(
         jira_config: JiraConfig | None = None
         if do_import:
             jira_config = jira_config_from_env()
+        project_key = (project or "").strip() or project_key_from_env()
 
         results = process_cases(
             documents,
             output_dir=output,
             do_import=do_import,
             jira_config=jira_config,
-            project_key=project,
+            project_key=project_key,
             issue_type=issue_type,
             dry_run=dry_run,
             skip_assignee=skip_assignee,
@@ -723,8 +769,7 @@ def test_case_cmd(
 def test_run_cmd() -> None:
     """Import Polarion test-run XML into Jira (not implemented yet)."""
     raise click.ClickException(
-        "beetlejuice test-run is not implemented yet "
-        "(use test-case for import-testcase.xml)",
+        "beetlejuice test-run is not implemented yet (use test-case for import-testcase.xml)",
     )
 
 

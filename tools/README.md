@@ -17,12 +17,13 @@ pip install -e /path/to/ai-tools/tools
 |---------|-------------|
 | `clean-twd` | Remove stale IdM-CI `twd` logs and test artifacts before re-execution |
 | `pull-jenkins-artifacts` | Fetch Jenkins console, extract `RD_JR_ARTIFACTS_URL`, download twd artifacts |
-| `check-ansible` | yamllint + dual-stack ansible syntax-check / ansible-lint (writing-ansible) |
+| `check-ansible` | yamllint + multi-stack ansible syntax-check / ansible-lint (writing-ansible) |
 | `dump-polarion-testcase` | Fetch a Polarion testcase via REST API and dump it as `key=value` |
 | `import-jira-testcase` | Import a jira-format dump into RHELTEST (match by ID, then summary) |
 | `scan-python-testcase` | Scan local Python tests (Betelgeuse-style) into jira-format dumps |
 | `beetlejuice` | Import Betelgeuse Polarion XML to Jira (`test-case`; `test-run` planned) |
 | `is-merged` | Check whether a local tip is already on upstream (ancestor / cherry / patch-id) |
+| `clone-review` | Clone a GitHub PR / GitLab MR under `~/git/@REVIEWS` and list changed files |
 
 ### clean-twd
 
@@ -63,18 +64,21 @@ one or more Ansible YAML files:
 
 1. Discover `$ANSIBLE_ROOT` (`ansible.cfg`, `.ansible-lint`, `.yamllint`, …)
 2. **yamllint** (system, or `uvx` fallback)
-3. **ansible-playbook --syntax-check** on playbooks — system + uvx
-   (Python 3.12 + `ansible==9.13.0` by default); fails on `[DEPRECATION WARNING]`
+3. **ansible-playbook --syntax-check** on playbooks — system + uvx pins
+   (Python 3.12 + `ansible==9.13.0`, plus idm-ci `ansible==8.7.0`); fails on
+   `[DEPRECATION WARNING]`
 4. **ansible-lint --strict** when the project uses ansible-lint, or for
-   non-playbook role/tasks files — system + uvx
-5. **ansible-lint --strict -t deprecations** always — system + uvx
+   non-playbook role/tasks files — system + both uvx pins
+5. **ansible-lint --strict -t deprecations** always — system + both uvx pins
 
 ```bash
 check-ansible roles/facts/tasks/RedHat.yml
 check-ansible playbook.yml -i inventory.yml
 check-ansible roles/facts/tasks/RedHat.yml --skip-uvx -q
+check-ansible roles/facts/tasks/RedHat.yml --skip-extra -q   # primary uvx only
 check-ansible roles/facts/tasks/RedHat.yml --json
-check-ansible path.yml --ansible-version 9.8.0   # e.g. CentOS 8 pin
+check-ansible path.yml --ansible-version 9.8.0   # e.g. CentOS 8 primary pin
+check-ansible path.yml --extra-ansible-version 8.7.0 --extra-python 3.12
 ```
 
 Exit `0` when all non-skipped checks pass; `1` on lint/syntax/deprecation
@@ -180,8 +184,15 @@ decompressed automatically.
 | `automation_script` if http(s), else `testscript` hyperlink | `URL` |
 | description + setup + test-steps + other fields | `description` (HTML) |
 
-Requires `-o` and/or `--import`. Import needs `JIRA_URL`, `JIRA_EMAIL`,
-`JIRA_API_TOKEN` (same as `import-jira-testcase`).
+Requires `-o` and/or `--import`. Import needs IdM-CI Jira env vars (with
+`JIRA_*` fallback when run from ai-tools):
+
+| Variable | Role |
+|----------|------|
+| `IDMCI_JIRA_URL` | Jira base URL (default: `https://stage-redhat.atlassian.net`) |
+| `IDMCI_JIRA_EMAIL` | Account email (required for `--import`) |
+| `IDMCI_JIRA_API_TOKEN` | API token (required for `--import`) |
+| `IDMCI_JIRA_PROJECT` | Default project key (`-P` / `--project`; else `RHELTEST`) |
 
 ```bash
 # Dump only (from local XML or polarion/ dir)
@@ -193,9 +204,9 @@ beetlejuice test-case 'https://idm-artifacts…/polarion/' -o /tmp/bj-dumps --li
 beetlejuice test-case 'https://idm-artifacts…/polarion/import-testcase.xml' -o /tmp/bj-dumps
 
 # Push to stage Jira (dry-run first)
-export JIRA_URL=https://stage-redhat.atlassian.net
-export JIRA_EMAIL=<you@redhat.com>
-export JIRA_API_TOKEN=<token>
+export IDMCI_JIRA_EMAIL=<you@redhat.com>
+export IDMCI_JIRA_API_TOKEN=<token>
+# optional: IDMCI_JIRA_URL / IDMCI_JIRA_PROJECT (defaults: stage URL, RHELTEST)
 beetlejuice test-case /path/to/import-testcase.xml --import -n --skip-assignee --skip-components
 beetlejuice test-case /path/to/import-testcase.xml --import --skip-assignee --team rhel-idm-sssd --tier 1
 ```
@@ -238,6 +249,39 @@ is-merged /path/to/worktree --no-origin
 ```
 
 Exit `0` when merged, `1` when not, `2` on error.
+
+### clone-review
+
+Clones a GitHub PR or GitLab MR under ``~/git/@REVIEWS`` (or
+``$CLONE_REVIEW_ROOT``), checks out the PR/MR head, and lists files changed
+vs the target/default branch. Used by the
+[review-changes](../skills/review-changes/SKILL.md) skill.
+
+The destination path **must** contain the substring ``reviews`` (safety rail
+for agent use). Existing matching clones are refreshed; unrelated directories
+are not overwritten.
+
+Requires ``gh`` (GitHub) or ``glab`` (GitLab) on ``PATH``.
+
+```bash
+clone-review https://github.com/SSSD/sssd/pull/1842
+clone-review https://gitlab.cee.redhat.com/identity-management/idm-ci/-/merge_requests/2726
+clone-review identity-management/idm-ci!2726 --host gitlab.cee.redhat.com --json
+clone-review SSSD/sssd#1842 --name sssd-pr1842 -q
+clone-review URL --root ~/git/@REVIEWS --no-refresh
+```
+
+| Flag | Purpose |
+|------|---------|
+| `reference` | PR/MR URL, or `owner/repo#N` / `group/proj!N` |
+| `--root` | Parent dir (must contain `reviews`) |
+| `--name` | Clone dirname under `--root` |
+| `--platform` / `--host` | Force platform/host for shorthand |
+| `--no-refresh` | Reuse clone; only recompute the diff |
+| `--json` | Machine-readable result |
+| `-q` | Omit file list / diffstat from text output |
+
+Exit `0` on success, `2` on error.
 
 ## Tests
 

@@ -1,12 +1,13 @@
 ---
 name: review-changes
 description: >-
-  Clones a GitHub or GitLab PR/MR with gh or glab under ~/git/@REVIEWS/ (path must
-  include the literal substring reviews), computes the changed file set against the
-  default branch, runs project-appropriate linters in read-only mode, then evaluates
-  the diff for unclear docstrings and general code quality. Use when reviewing pull
-  requests or merge requests, when the user mentions review-changes, gh, glab, or wants
-  lint plus a concise quality pass on remote branch changes without an existing checkout.
+  Clones a GitHub or GitLab PR/MR with the approved `clone-review` CLI under
+  ~/git/@REVIEWS/ (path must include the literal substring reviews), computes the
+  changed file set against the default branch, runs project-appropriate linters in
+  read-only mode, then evaluates the diff for unclear docstrings and general code
+  quality. Use when reviewing pull requests or merge requests, when the user
+  mentions review-changes, gh, glab, clone-review, or wants lint plus a concise
+  quality pass on remote branch changes without an existing checkout.
 ---
 
 # Review-changes (PR/MR clone and linters)
@@ -19,65 +20,70 @@ If you **edit** Python in a workspace after review, use the project skill [run-p
 
 ---
 
-## 1. Choose CLI and clone location
+## 1. Clone with `clone-review` (preferred)
 
-- Prefer **`gh`** when the URL or context is GitHub (`github.com`, `GH_HOST`, or `gh` succeeds).
-- Prefer **`glab`** for GitLab (`gitlab.com`, self-hosted GitLab, or `glab` succeeds).
-- If both exist, pick the one matching the remote URL the user gave.
-
-**Clone under `~/git/@REVIEWS/`** (same as `$HOME/git/@REVIEWS/`). The full path must still include the literal substring `reviews`. Name each worktree distinctly under that directory. Examples:
-
-- `~/git/@REVIEWS/sssd-pr1842`
-- `~/git/@REVIEWS/gitlab-io-sssd-mr42`
-
-Create `~/git/@REVIEWS/` (and any intermediate parents) if needed. Do not clone over an unrelated repo without confirming.
-
-### GitHub — typical patterns
+Prefer the approved CLI from [ai-tools/tools](../../tools/README.md) over ad-hoc
+`gh` / `glab` / `git` sequences. Install once:
 
 ```bash
-# Clone default branch, then checkout PR (replace OWNER, REPO, N)
-gh repo clone OWNER/REPO ~/git/@REVIEWS/REPO-prN
-cd ~/git/@REVIEWS/REPO-prN
-gh pr checkout N
+pip install -e ~/git/ai-tools/tools
 ```
-
-If the user only provides a PR URL, use `gh pr checkout --help` for the exact form supported by the installed `gh` version; fallback is clone + `git fetch origin pull/N/head:pr-N` + `git checkout pr-N`.
-
-### GitLab — typical patterns
 
 ```bash
-glab repo clone GROUP/REPO ~/git/@REVIEWS/REPO-mrN
-cd ~/git/@REVIEWS/REPO-mrN
-glab mr checkout IID
+clone-review https://github.com/OWNER/REPO/pull/N --json
+clone-review https://gitlab.cee.redhat.com/GROUP/REPO/-/merge_requests/N --json
+clone-review identity-management/idm-ci!2726 --host gitlab.cee.redhat.com --json
 ```
 
-Use the project’s documented default branch name (`main`, `master`, `devel`) when computing the diff below.
+| Flag | Purpose |
+|------|---------|
+| `reference` | PR/MR URL, or `owner/repo#N` / `group/proj!N` |
+| `--root` | Parent dir (default `~/git/@REVIEWS` or `$CLONE_REVIEW_ROOT`); must contain `reviews` |
+| `--name` | Clone dirname (default `<repo>-prN` / `<repo>-mrN`) |
+| `--platform` / `--host` | Force platform/host for shorthand |
+| `--no-refresh` | Reuse existing clone; only recompute the diff |
+| `--json` | Machine-readable result (use this for agents) |
+| `-q` | Omit file list / diffstat from text output |
 
----
+Exit: `0` success, `2` error.
 
-## 2. Determine changed files
+From the JSON (or text) report, take:
 
-From the checked-out branch (PR/MR head):
+| Field | Use |
+|-------|-----|
+| `clone_path` | Working tree for lint / reading the diff |
+| `base_ref` / `base_sha` | Merge-base vs target/default branch |
+| `head_sha` | PR/MR tip |
+| `changed_files` | Lint scope |
+| `diff_stat` | Short summary for the review report |
+
+**Safety:** `clone-review` refuses destinations whose resolved path does not
+contain `reviews`, and will not overwrite an unrelated existing clone.
+
+### Manual fallback (only if CLI unavailable)
+
+- Prefer **`gh`** for GitHub; **`glab`** for GitLab.
+- Clone under `~/git/@REVIEWS/` with a distinct name (`REPO-prN` / `REPO-mrN`).
+- Checkout: `gh pr checkout N` or `glab mr checkout IID`.
+- Changed files:
 
 ```bash
 git fetch origin main 2>/dev/null || git fetch origin master 2>/dev/null || true
 BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || git merge-base HEAD origin/devel 2>/dev/null)
 git diff --name-only "$BASE"..HEAD
+git diff --stat "$BASE"..HEAD
 ```
-
-If merge-base is ambiguous, fall back to the remote’s default branch from `gh repo view --json defaultBranchRef` or `glab repo view -F json`, then `git merge-base HEAD "origin/$DEFAULT"`.
-
-Treat the output as the **changed file set** for lint scope. Optionally show a short stat: `git diff --stat "$BASE"..HEAD`.
 
 ---
 
-## 3. Run appropriate linters (read-only for review)
+## 2. Run appropriate linters (read-only for review)
 
-Run tools **from the clone root** so repo configs apply (`setup.cfg`, `tox.ini`, `.flake8`, `pyproject.toml`, `.pre-commit-config.yaml`).
+Run tools **from the clone root** (`clone_path`) so repo configs apply (`setup.cfg`, `tox.ini`, `.flake8`, `pyproject.toml`, `.pre-commit-config.yaml`).
 
 | Changed files | Action |
 |---------------|--------|
 | `*.py` | `flake8` on those paths (omit `--max-line-length` if project config sets it). Run `black --check` on the same set **if** the project uses Black (config in `pyproject.toml` / `.pre-commit-config.yaml` / CI). Run `ruff check` without `--fix` if `ruff` is configured. |
+| Ansible `*.yml` / `*.yaml` | Prefer [writing-ansible](../writing-ansible/SKILL.md) / `check-ansible` (system + uvx pins). |
 | `*.toml` / `*.cfg` / `*.ini` | Only run Python tools if they are clearly the lint config; otherwise skip. |
 | JS/TS | If `package.json` has `lint` or `eslint`, run `npm ci` or `pnpm install` only when needed, then the documented lint script on changed files or the package scope the project uses. |
 | Go / Rust / etc. | Run `golangci-lint`, `cargo clippy`, etc. only when the repo defines them and changed files match. |
@@ -88,9 +94,9 @@ If a tool is missing, say which package or dev extra installs it; do not assume 
 
 ---
 
-## 4. Evaluate the change (after linters)
+## 3. Evaluate the change (after linters)
 
-Read **`git diff "$BASE"..HEAD`** (and new/changed symbols in the changed file set). Focus on the PR’s intent and regressions, not style (linters already covered that).
+Read **`git diff "$base_sha".."$head_sha"`** from `clone_path` (and new/changed symbols in `changed_files`). Focus on the PR’s intent and regressions, not style (linters already covered that).
 
 **Docstrings and comments**
 
@@ -110,6 +116,6 @@ Classify findings (e.g. must-fix / should-fix / nit) and tie each to a file or h
 
 ---
 
-## 5. Report
+## 4. Report
 
-Summarize: clone path, base ref, changed files, **linter** pass/fail and commands, then **quality/docstring** findings from section 4 (or state none worth noting).
+Summarize: `clone_path`, `base_ref` / SHAs, changed files, **linter** pass/fail and commands, then **quality/docstring** findings from section 3 (or state none worth noting).

@@ -2,11 +2,12 @@
 name: writing-ansible
 description: >-
   Writes and edits Ansible playbooks, roles, tasks, handlers, and vars. After any
-  Ansible YAML change, runs yamllint and ansible syntax-check on both system Ansible
-  and Python 3.12 + ansible 9.13.0 via uvx, with no deprecation warnings (ansible-lint
-  --strict and output checks), and project ansible-lint on both stacks when configured,
-  until clean. Use when creating or modifying Ansible code, playbooks, roles, inventories,
-  or ansible-lint/yamllint config.
+  Ansible YAML change, runs yamllint and ansible syntax-check on system Ansible
+  plus uvx pins (Python 3.12 + ansible 9.13.0 and idm-ci ansible 8.7.0), with no
+  deprecation warnings (ansible-lint --strict and output checks), and project
+  ansible-lint on all stacks when configured, until clean. Use when creating or
+  modifying Ansible code, playbooks, roles, inventories, or ansible-lint/yamllint
+  config.
 ---
 
 # Ansible edits: yamllint and syntax-check
@@ -14,17 +15,19 @@ description: >-
 ## CLI helper (`check-ansible`)
 
 Prefer the packaged runner from `ai-tools/tools` when available — it encodes this
-skill’s gate (yamllint, dual-stack syntax-check / ansible-lint, deprecations):
+skill’s gate (yamllint, multi-stack syntax-check / ansible-lint, deprecations):
 
 ```bash
 pip install -e /path/to/ai-tools/tools   # once
 check-ansible path/to/changed.yml
 check-ansible path/to/playbook.yml -i inventory.yml
 check-ansible path/to/tasks.yml --skip-uvx -q
+check-ansible path/to/tasks.yml --skip-extra -q   # primary uvx only (skip idm-ci 8.7.0)
 ```
 
-See `tools/README.md` for flags (`--ansible-version`, `--json`, skip switches).
-When the CLI is not installed, run the manual steps below.
+See `tools/README.md` for flags (`--ansible-version`, `--extra-ansible-version`,
+`--extra-python`, `--json`, skip switches). When the CLI is not installed, run
+the manual steps below.
 
 ## Before running any check
 
@@ -48,22 +51,27 @@ Do **not** assume default CLI flags until you have checked the repo. Discover ho
 
 3. **Working directory** — Run checks from the directory that owns `ansible.cfg` / `.ansible-lint` / `.yamllint` when those files are not at the repo root (e.g. `sssd-ci-containers/src/ansible/`, `idm-ci/`). Walk up from the edited file until you find project config, then use that as `$ANSIBLE_ROOT`.
 
-4. **Two Ansible stacks** — Run every Ansible check **twice** after edits:
-   - **System** — `ansible-playbook`, `ansible-lint`, and `ansible-galaxy` from `PATH` (the interpreter/packages on the host or active project venv).
-   - **Pinned compat (uvx)** — same commands via **uvx** under **Python 3.12** and **`ansible==9.13.0`** (bundles **ansible-core 2.16.x**).
+4. **Ansible stacks** — Run every Ansible check on **system** and on **each** uvx pin after edits:
 
-   Record both stacks before checking (helps debug version-specific failures):
+   | Stack | How | Purpose |
+   |-------|-----|---------|
+   | **System** | `ansible-playbook` / `ansible-lint` on `PATH` | Host / active venv |
+   | **uvx primary** | Python **3.12** + **`ansible==9.13.0`** (ansible-core **2.16.x**) | Default forward/compat gate |
+   | **uvx idm-ci** | Python **3.12** + **`ansible==8.7.0`** (ansible-core **2.15.x**) | Matches `idm-ci` `agent/requirements/all.pip` |
+
+   Record stack versions before checking:
 
    ```bash
    ansible-playbook --version
    uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0' ansible-playbook --version
+   uvx --python 3.12 --from ansible-core --with 'ansible==8.7.0' ansible-playbook --version
    ```
 
-   Fix failures on **either** stack before considering the task done. If CI pins a different `ansible==9.x` for the compat run (e.g. sssd-ci-containers uses `9.8` for CentOS 8), use that pin in the uvx `--with` instead of `9.13.0`.
+   Fix failures on **any** stack before considering the task done. If CI pins a different primary `ansible==9.x` (e.g. sssd-ci-containers uses `9.8` for CentOS 8), use that pin for the **primary** uvx `--with` instead of `9.13.0`; still run the idm-ci **8.7.0** extra pin unless the project clearly does not need it (`check-ansible --skip-extra`, or omit the extra manual uvx invocation).
 
-   When `uv` / `uvx` is unavailable, run the **system** stack only and report that the compat gate was skipped.
+   When `uv` / `uvx` is unavailable, run the **system** stack only and report that the uvx gates were skipped.
 
-## uvx wrappers (Python 3.12 + ansible 9.13.0)
+## uvx wrappers (pinned stacks)
 
 Use these prefixes from `$ANSIBLE_ROOT`. They create an isolated tool env on first run.
 
@@ -73,25 +81,27 @@ Use these prefixes from `$ANSIBLE_ROOT`. They create an isolated tool env on fir
 uv python install 3.12
 ```
 
-**Pinned commands:**
+**Pinned command prefixes** (reuse for every check below):
 
 ```bash
-# ansible-playbook / ansible-galaxy (ansible 9.13.0 pulls ansible-core + bundled collections)
-uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0'
+# Primary — ansible 9.13.0 (ansible-core 2.16.x)
+UVX_ANSIBLE=(uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0')
+UVX_LINT=(uvx --python 3.12 --from ansible-lint --with 'ansible==9.13.0')
 
-# ansible-lint (uses the same ansible-core/collections via --with)
-uvx --python 3.12 --from ansible-lint --with 'ansible==9.13.0'
+# idm-ci agent — ansible 8.7.0 (ansible-core 2.15.x; agent/requirements/all.pip)
+UVX_IDMCI_ANSIBLE=(uvx --python 3.12 --from ansible-core --with 'ansible==8.7.0')
+UVX_IDMCI_LINT=(uvx --python 3.12 --from ansible-lint --with 'ansible==8.7.0')
 
 # yamllint (same Python interpreter for consistency)
 uvx --python 3.12 --from yamllint yamllint
 ```
 
-Example — syntax-check a playbook:
+Example — syntax-check a playbook on both uvx pins:
 
 ```bash
 cd "$ANSIBLE_ROOT"
-uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0' \
-  ansible-playbook --syntax-check -i inventory.yml path/to/playbook.yml
+"${UVX_ANSIBLE[@]}" ansible-playbook --syntax-check -i inventory.yml path/to/playbook.yml
+"${UVX_IDMCI_ANSIBLE[@]}" ansible-playbook --syntax-check -i inventory.yml path/to/playbook.yml
 ```
 
 **Collections** — when syntax-check or ansible-lint fails on missing collections, install project requirements into a local path and point Ansible at it:
@@ -101,14 +111,13 @@ cd "$ANSIBLE_ROOT"
 COLLECTIONS_DIR="${ANSIBLE_ROOT}/.ansible-compat/collections"
 mkdir -p "$COLLECTIONS_DIR"
 export ANSIBLE_COLLECTIONS_PATH="$COLLECTIONS_DIR"
-uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0' \
-  ansible-galaxy collection install -r requirements.yml -p "$COLLECTIONS_DIR"
+"${UVX_ANSIBLE[@]}" ansible-galaxy collection install -r requirements.yml -p "$COLLECTIONS_DIR"
 # or: collections/requirements.yml, meta/collection-requirements.yml — use what the repo documents
 ```
 
 If system-wide collections under `/usr/share/ansible/collections` skew uvx results, keep `ANSIBLE_COLLECTIONS_PATH` set to the project-local dir for the compat run only; the system stack may still use the default collection path.
 
-**Deprecation checks** — for every Ansible command below on **both** stacks, use:
+**Deprecation checks** — for every Ansible command below on **all** stacks, use:
 
 ```bash
 export ANSIBLE_DEPRECATION_WARNINGS=True
@@ -145,9 +154,9 @@ If multiple files changed, pass all of them (or the smallest sensible scope the 
 
 When CI scopes yamllint to specific directories, still lint **changed files outside that scope** individually so your edit does not introduce new violations.
 
-### 2. Ansible syntax-check (system + uvx)
+### 2. Ansible syntax-check (system + uvx pins)
 
-Run **both** stacks for every changed playbook. Use the same inventory/extra args for each.
+Run **system** and **both** uvx pins for every changed playbook. Use the same inventory/extra args for each. Define the `UVX_*` arrays from **uvx wrappers** above first.
 
 **Playbooks** (files with a top-level `hosts:` / `import_playbook:` / `- hosts:` play list):
 
@@ -159,40 +168,49 @@ output=$(ansible-playbook --syntax-check path/to/playbook.yml 2>&1) || { echo "$
 echo "$output"
 echo "$output" | rg -qi '\[DEPRECATION WARNING\]|DEPRECATION WARNING' && exit 1
 
-# 2) Pinned compat (Python 3.12 + ansible 9.13.0)
-output=$(uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0' \
-  ansible-playbook --syntax-check path/to/playbook.yml 2>&1) || { echo "$output"; exit 1; }
+# 2) Primary uvx (Python 3.12 + ansible 9.13.0)
+output=$("${UVX_ANSIBLE[@]}" ansible-playbook --syntax-check path/to/playbook.yml 2>&1) || { echo "$output"; exit 1; }
+echo "$output"
+echo "$output" | rg -qi '\[DEPRECATION WARNING\]|DEPRECATION WARNING' && exit 1
+
+# 3) idm-ci uvx (Python 3.12 + ansible 8.7.0)
+output=$("${UVX_IDMCI_ANSIBLE[@]}" ansible-playbook --syntax-check path/to/playbook.yml 2>&1) || { echo "$output"; exit 1; }
 echo "$output"
 echo "$output" | rg -qi '\[DEPRECATION WARNING\]|DEPRECATION WARNING' && exit 1
 ```
 
-Use the inventory the project documents when syntax-check requires it (comments in the playbook, README, or CI). Common patterns — run **each** line on **both** stacks:
+Use the inventory the project documents when syntax-check requires it (comments in the playbook, README, or CI). Common patterns — run **each** line on **system** and **both** uvx pins:
 
 ```bash
 ansible-playbook --syntax-check -i config/test.inventory.yaml path/to/playbook.yml
-uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0' \
-  ansible-playbook --syntax-check -i config/test.inventory.yaml path/to/playbook.yml
+"${UVX_ANSIBLE[@]}" ansible-playbook --syntax-check -i config/test.inventory.yaml path/to/playbook.yml
+"${UVX_IDMCI_ANSIBLE[@]}" ansible-playbook --syntax-check -i config/test.inventory.yaml path/to/playbook.yml
 ```
 
-If `--syntax-check` fails because of missing inventory or collections, use the project’s documented inventory, install declared collections (see **Collections** under **uvx wrappers** for the compat stack), or run from the same container/venv CI uses — do not skip either stack.
+If `--syntax-check` fails because of missing inventory or collections, use the project’s documented inventory, install declared collections (see **Collections** under **uvx wrappers**), or run from the same container/venv CI uses — do not skip system or either uvx pin without recording why.
 
-**Role tasks, handlers, includes without a standalone playbook** — syntax-check on **both** stacks via ansible-lint or a minimal wrapper playbook:
+**Role tasks, handlers, includes without a standalone playbook** — syntax-check on **all** stacks via ansible-lint or a minimal wrapper playbook:
 
 ```bash
 # Prefer when .ansible-lint or pre-commit ansible-lint is present — always add --strict:
 ansible-lint --strict path/to/tasks/main.yml
-uvx --python 3.12 --from ansible-lint --with 'ansible==9.13.0' \
-  ansible-lint --strict path/to/tasks/main.yml
+"${UVX_LINT[@]}" ansible-lint --strict path/to/tasks/main.yml
+"${UVX_IDMCI_LINT[@]}" ansible-lint --strict path/to/tasks/main.yml
 
-# Or one-off wrapper (from $ANSIBLE_ROOT, adjust role path) — run on both stacks:
+# Or one-off wrapper (from $ANSIBLE_ROOT, adjust role path) — run on all stacks:
 ansible-playbook --syntax-check -i localhost, -c local - <<'EOF'
 ---
 - hosts: localhost
   tasks:
     - import_tasks: roles/myrole/tasks/main.yml
 EOF
-uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0' \
-  ansible-playbook --syntax-check -i localhost, -c local - <<'EOF'
+"${UVX_ANSIBLE[@]}" ansible-playbook --syntax-check -i localhost, -c local - <<'EOF'
+---
+- hosts: localhost
+  tasks:
+    - import_tasks: roles/myrole/tasks/main.yml
+EOF
+"${UVX_IDMCI_ANSIBLE[@]}" ansible-playbook --syntax-check -i localhost, -c local - <<'EOF'
 ---
 - hosts: localhost
   tasks:
@@ -200,11 +218,11 @@ uvx --python 3.12 --from ansible-core --with 'ansible==9.13.0' \
 EOF
 ```
 
-Fix syntax errors and re-run the failing stack until both exit 0 with **no deprecation warnings** in captured output.
+Fix syntax errors and re-run the failing stack until all exit 0 with **no deprecation warnings** in captured output.
 
 ### 3. ansible-lint (when the project uses it)
 
-If the repo has `.ansible-lint`, an `ansible-lint` pre-commit hook, or an `ansible-lint` CI job, run ansible-lint on changed Ansible paths on **both** stacks after yamllint and syntax-check pass. Always pass **`--strict`** so warnings (including deprecation-related rules in `warn_list`) fail the run:
+If the repo has `.ansible-lint`, an `ansible-lint` pre-commit hook, or an `ansible-lint` CI job, run ansible-lint on changed Ansible paths on **all** stacks after yamllint and syntax-check pass. Always pass **`--strict`** so warnings (including deprecation-related rules in `warn_list`) fail the run:
 
 ```bash
 cd "$ANSIBLE_ROOT"
@@ -213,15 +231,17 @@ export ANSIBLE_DEPRECATION_WARNINGS=True
 # System
 ansible-lint --strict path/to/changed_file.yml
 
-# Pinned compat (Python 3.12 + ansible 9.13.0)
-uvx --python 3.12 --from ansible-lint --with 'ansible==9.13.0' \
-  ansible-lint --strict path/to/changed_file.yml
+# Primary uvx (Python 3.12 + ansible 9.13.0)
+"${UVX_LINT[@]}" ansible-lint --strict path/to/changed_file.yml
+
+# idm-ci uvx (Python 3.12 + ansible 8.7.0)
+"${UVX_IDMCI_LINT[@]}" ansible-lint --strict path/to/changed_file.yml
 # or the path/directory CI passes (e.g. playbooks/, src/ansible/)
 ```
 
-Respect `.ansible-lint` skip/enable rules; do not add ad-hoc `--skip-list` unless the user asks. A rule may pass on one stack and fail on the other — fix the code or document a stack-specific exception only when the project already uses that pattern.
+Respect `.ansible-lint` skip/enable rules; do not add ad-hoc `--skip-list` unless the user asks. A rule may pass on one stack and fail on another — fix the code or document a stack-specific exception only when the project already uses that pattern.
 
-### 4. Deprecation scan (always — both stacks)
+### 4. Deprecation scan (always — all stacks)
 
 Even when the project has no `.ansible-lint`, run a **deprecation-only** ansible-lint pass on every changed Ansible path. `--syntax-check` does not report most deprecations; this step catches them.
 
@@ -232,27 +252,27 @@ export ANSIBLE_DEPRECATION_WARNINGS=True
 # System
 ansible-lint --strict -t deprecations path/to/changed_file.yml
 
-# Pinned compat (Python 3.12 + ansible 9.13.0)
-uvx --python 3.12 --from ansible-lint --with 'ansible==9.13.0' \
-  ansible-lint --strict -t deprecations path/to/changed_file.yml
+# Primary + idm-ci uvx pins
+"${UVX_LINT[@]}" ansible-lint --strict -t deprecations path/to/changed_file.yml
+"${UVX_IDMCI_LINT[@]}" ansible-lint --strict -t deprecations path/to/changed_file.yml
 ```
 
 The `deprecations` tag covers rules such as `deprecated-module`, `deprecated-bare-vars`, `deprecated-local-action`, and related syntax removals. Fix every finding; do not `# noqa` or skip-list unless the project already documents that exception.
 
-When a project `.ansible-lint` sets `strict: true` or `profile: production`, the full **§3** run may already enforce overlapping rules — still run **§4** on changed paths so both stacks explicitly gate deprecations.
+When a project `.ansible-lint` sets `strict: true` or `profile: production`, the full **§3** run may already enforce overlapping rules — still run **§4** on changed paths so all stacks explicitly gate deprecations.
 
 ## Order of operations
 
-1. **Discover** lint expectations (in-repo config, then CI if needed), as in **Before running any check**. Set `$ANSIBLE_ROOT`. Ensure `uv python install 3.12` when needed. Print `ansible-playbook --version` for system and uvx stacks.
+1. **Discover** lint expectations (in-repo config, then CI if needed), as in **Before running any check**. Set `$ANSIBLE_ROOT`. Ensure `uv python install 3.12` when needed. Print `ansible-playbook --version` for system and both uvx pins (9.13.0 and 8.7.0).
 2. Edit the Ansible YAML file(s).
 3. **yamllint** on every changed file → fix → re-run until clean.
-4. **ansible-playbook --syntax-check** on changed playbooks — **system**, then **uvx** (same inventory) → fix → re-run failing stack until both pass with **no `[DEPRECATION WARNING]` in output**.
-5. For changed role tasks/handlers/includes, **syntax-check** via ansible-lint or wrapper playbook on **both** stacks → fix → re-run until both pass cleanly.
-6. If the project uses **ansible-lint**, run **`ansible-lint --strict`** on **system**, then **uvx**, on changed paths → fix → re-run until both pass.
-7. **`ansible-lint --strict -t deprecations`** on changed paths — **system**, then **uvx** → fix → re-run until both pass (always, even when §6 was skipped).
+4. **ansible-playbook --syntax-check** on changed playbooks — **system**, then **uvx 9.13.0**, then **uvx 8.7.0** (same inventory) → fix → re-run failing stack until all pass with **no `[DEPRECATION WARNING]` in output**.
+5. For changed role tasks/handlers/includes, **syntax-check** via ansible-lint or wrapper playbook on **all** stacks → fix → re-run until all pass cleanly.
+6. If the project uses **ansible-lint**, run **`ansible-lint --strict`** on **system**, then **both** uvx pins, on changed paths → fix → re-run until all pass.
+7. **`ansible-lint --strict -t deprecations`** on changed paths — **system**, then **both** uvx pins → fix → re-run until all pass (always, even when §6 was skipped).
 8. Re-run **yamllint** and any failed Ansible stack if lint/autofix edits touched YAML again.
 
-Do not mark the task complete while any check fails on files you changed on **either** stack, or while **deprecation warnings** remain in Ansible check output or ansible-lint results.
+Do not mark the task complete while any check fails on files you changed on **any** stack, or while **deprecation warnings** remain in Ansible check output or ansible-lint results.
 
 ## Authoring best practices
 
@@ -301,26 +321,28 @@ Follow **existing repo conventions first** (naming, FQCN vs short module names, 
 
 ### ansible-lint autofix
 
-When ansible-lint reports fixable `fqcn` (or other `--fix`-able) findings and the project does not forbid it, run `--fix` on the **system** stack first, then re-validate on **both** stacks:
+When ansible-lint reports fixable `fqcn` (or other `--fix`-able) findings and the project does not forbid it, run `--fix` on the **system** stack first, then re-validate on **all** stacks:
 
 ```bash
 ansible-lint --fix path/to/changed_file.yml
-uvx --python 3.12 --from ansible-lint --with 'ansible==9.13.0' \
-  ansible-lint --fix path/to/changed_file.yml
+"${UVX_LINT[@]}" ansible-lint --fix path/to/changed_file.yml
+"${UVX_IDMCI_LINT[@]}" ansible-lint --fix path/to/changed_file.yml
 ```
 
-Re-run yamllint, syntax-check (both stacks, no deprecation output), **`ansible-lint --strict`**, and **`ansible-lint --strict -t deprecations`** after autofix. Never `--fix` across unrelated files the user did not ask to change.
+Re-run yamllint, syntax-check (all stacks, no deprecation output), **`ansible-lint --strict`**, and **`ansible-lint --strict -t deprecations`** after autofix. Never `--fix` across unrelated files the user did not ask to change.
 
 ## Tools missing
 
 **System stack** — use whatever the project documents (`dnf install ansible-core`, project venv, container). At minimum: `ansible-playbook`, and **`ansible-lint`** (required for deprecation scans even when the project has no `.ansible-lint`).
 
-**Compat stack (uvx)** — install [uv](https://docs.astral.sh/uv/) and use **uvx wrappers** above (`uv python install 3.12` once). If `uv` / `uvx` is unavailable, run the system stack only and report that the Python 3.12 + ansible 9.13.0 gate was skipped.
+**uvx pins** — install [uv](https://docs.astral.sh/uv/) and use **uvx wrappers** above (`uv python install 3.12` once). If `uv` / `uvx` is unavailable, run the system stack only and report that the Python 3.12 + ansible 9.13.0 / 8.7.0 gates were skipped.
 
 **Fallback install** when neither stack has the tools:
 
 ```bash
 pip install 'ansible==9.13.0' yamllint ansible-lint
+# idm-ci agent pin when validating that tree:
+# pip install 'ansible==8.7.0'
 # or: dnf install ansible-core yamllint ansible-lint
 ```
 
@@ -330,5 +352,5 @@ Prefer the project’s documented toolchain when known. If tools truly cannot be
 
 - **Plain YAML without Ansible** (e.g. GitLab CI, generic config) — run **yamllint** only unless the user asked for Ansible changes or the file lives under Ansible paths the project lints.
 - **Line-length** — Prefer wrapping or splitting long lines; use `# yamllint disable-line rule:line-length` only when matching existing project patterns (e.g. long URLs in idm-ci metadata).
-- **Two Ansible stacks** — `ansible-playbook --syntax-check` and ansible-lint (when configured) must pass on **system Ansible** and on **uvx** (Python 3.12 + ansible 9.13.0). yamllint runs once via system `yamllint` when available.
-- **No deprecation warnings** — `ansible-lint --strict -t deprecations` on both stacks plus scanning ansible-playbook output for `[DEPRECATION WARNING]`; fix all deprecations before done.
+- **Ansible stacks** — `ansible-playbook --syntax-check` and ansible-lint (when configured) must pass on **system Ansible**, **uvx ansible 9.13.0**, and **uvx ansible 8.7.0** (idm-ci agent pin). yamllint runs once via system `yamllint` when available.
+- **No deprecation warnings** — `ansible-lint --strict -t deprecations` on all stacks plus scanning ansible-playbook output for `[DEPRECATION WARNING]`; fix all deprecations before done.

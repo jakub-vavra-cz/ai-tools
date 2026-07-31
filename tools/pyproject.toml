@@ -17,6 +17,7 @@ import-jira-testcase = "ai_tools.import_jira_testcase:main"
 scan-python-testcase = "ai_tools.scan_python_testcase:main"
 beetlejuice = "ai_tools.beetlejuice:main"
 is-merged = "ai_tools.is_merged:main"
+clone-review = "ai_tools.clone_review:main"
 
 [project.optional-dependencies]
 polarion-yaml = ["PyYAML>=6"]

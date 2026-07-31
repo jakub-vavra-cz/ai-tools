@@ -13,8 +13,12 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+# Primary uvx pin — ansible-core 2.16.x (writing-ansible default forward gate).
 DEFAULT_ANSIBLE_PIN = "9.13.0"
 DEFAULT_PYTHON = "3.12"
+# Extra uvx pin — idm-ci agent/requirements/all.pip (ansible-core 2.15.x).
+DEFAULT_EXTRA_ANSIBLE_PIN = "8.7.0"
+DEFAULT_EXTRA_PYTHON = "3.12"
 
 DEPRECATION_RE = re.compile(
     r"\[DEPRECATION WARNING\]|DEPRECATION WARNING",
@@ -33,6 +37,44 @@ ANSIBLE_ROOT_MARKERS = (
 PLAYBOOK_HINT_RE = re.compile(
     r"(?m)^(?:-?\s*)?(?:hosts|import_playbook)\s*:",
 )
+
+
+@dataclass(frozen=True)
+class UvxPin:
+    """One uvx ansible pin (python interpreter + ansible package version)."""
+
+    label: str
+    python: str
+    ansible_pin: str
+
+
+def resolve_uvx_pins(
+    *,
+    python: str = DEFAULT_PYTHON,
+    ansible_pin: str = DEFAULT_ANSIBLE_PIN,
+    extra_python: str = DEFAULT_EXTRA_PYTHON,
+    extra_ansible_pin: str = DEFAULT_EXTRA_ANSIBLE_PIN,
+    include_extra: bool = True,
+) -> list[UvxPin]:
+    """Build the list of uvx stacks to run.
+
+    Primary stack is always labeled ``uvx``. The idm-ci extra pin is added as
+    ``uvx-<version>`` when it differs from the primary and *include_extra* is
+    true.
+    """
+    pins = [UvxPin(label="uvx", python=python, ansible_pin=ansible_pin)]
+    if not include_extra:
+        return pins
+    if (extra_python, extra_ansible_pin) == (python, ansible_pin):
+        return pins
+    pins.append(
+        UvxPin(
+            label=f"uvx-{extra_ansible_pin}",
+            python=extra_python,
+            ansible_pin=extra_ansible_pin,
+        ),
+    )
+    return pins
 
 
 @dataclass
@@ -282,14 +324,17 @@ def check_ansible(
     inventory: Path | None = None,
     python: str = DEFAULT_PYTHON,
     ansible_pin: str = DEFAULT_ANSIBLE_PIN,
+    extra_python: str = DEFAULT_EXTRA_PYTHON,
+    extra_ansible_pin: str = DEFAULT_EXTRA_ANSIBLE_PIN,
     skip_uvx: bool = False,
+    skip_extra: bool = False,
     skip_yamllint: bool = False,
     skip_syntax_check: bool = False,
     skip_ansible_lint: bool = False,
     skip_deprecations: bool = False,
     force_ansible_lint: bool | None = None,
 ) -> CheckReport:
-    """Run yamllint + dual-stack Ansible checks on *paths*."""
+    """Run yamllint + multi-stack Ansible checks on *paths*."""
     resolved = resolve_paths(paths)
     if not resolved:
         raise ValueError("No paths to check")
@@ -308,6 +353,13 @@ def check_ansible(
     )
 
     deprecation_env = {"ANSIBLE_DEPRECATION_WARNINGS": "True"}
+    uvx_pins = resolve_uvx_pins(
+        python=python,
+        ansible_pin=ansible_pin,
+        extra_python=extra_python,
+        extra_ansible_pin=extra_ansible_pin,
+        include_extra=not skip_extra,
+    )
 
     # --- Versions ---
     if which("ansible-playbook"):
@@ -318,15 +370,21 @@ def check_ansible(
     else:
         report.versions["system"] = "(ansible-playbook not on PATH)"
 
-    if not skip_uvx and which("uvx"):
-        report.versions["uvx"] = capture_version(
-            uvx_ansible_playbook_argv(python=python, ansible_pin=ansible_pin),
-            cwd=root,
-        )
-    elif skip_uvx:
-        report.versions["uvx"] = "(skipped)"
+    if skip_uvx:
+        for pin in uvx_pins:
+            report.versions[pin.label] = "(skipped)"
+    elif which("uvx"):
+        for pin in uvx_pins:
+            report.versions[pin.label] = capture_version(
+                uvx_ansible_playbook_argv(
+                    python=pin.python,
+                    ansible_pin=pin.ansible_pin,
+                ),
+                cwd=root,
+            )
     else:
-        report.versions["uvx"] = "(uvx not on PATH)"
+        for pin in uvx_pins:
+            report.versions[pin.label] = "(uvx not on PATH)"
 
     # --- 1. yamllint ---
     if not skip_yamllint:
@@ -397,43 +455,46 @@ def check_ansible(
             )
 
         if skip_uvx:
-            report.results.append(
-                run_command(
-                    "syntax-check",
-                    "uvx",
-                    [],
-                    cwd=root,
-                    skipped=True,
-                    skip_reason="--skip-uvx",
-                ),
-            )
+            for pin in uvx_pins:
+                report.results.append(
+                    run_command(
+                        "syntax-check",
+                        pin.label,
+                        [],
+                        cwd=root,
+                        skipped=True,
+                        skip_reason="--skip-uvx",
+                    ),
+                )
         elif which("uvx"):
-            report.results.append(
-                run_command(
-                    "syntax-check",
-                    "uvx",
-                    [
-                        *uvx_ansible_playbook_argv(
-                            python=python,
-                            ansible_pin=ansible_pin,
-                        ),
-                        *syntax_argv_tail,
-                    ],
-                    cwd=root,
-                    env=deprecation_env,
-                ),
-            )
+            for pin in uvx_pins:
+                report.results.append(
+                    run_command(
+                        "syntax-check",
+                        pin.label,
+                        [
+                            *uvx_ansible_playbook_argv(
+                                python=pin.python,
+                                ansible_pin=pin.ansible_pin,
+                            ),
+                            *syntax_argv_tail,
+                        ],
+                        cwd=root,
+                        env=deprecation_env,
+                    ),
+                )
         else:
-            report.results.append(
-                run_command(
-                    "syntax-check",
-                    "uvx",
-                    [],
-                    cwd=root,
-                    skipped=True,
-                    skip_reason="uvx not on PATH",
-                ),
-            )
+            for pin in uvx_pins:
+                report.results.append(
+                    run_command(
+                        "syntax-check",
+                        pin.label,
+                        [],
+                        cwd=root,
+                        skipped=True,
+                        skip_reason="uvx not on PATH",
+                    ),
+                )
 
     # Deprecations always; full --strict for lint projects / non-playbooks.
     lint_targets = list(dict.fromkeys(rel_paths))
@@ -486,45 +547,48 @@ def check_ansible(
                 ),
             )
 
-        # uvx
+        # uvx pin(s)
         if skip_uvx:
-            report.results.append(
-                run_command(
-                    name,
-                    "uvx",
-                    [],
-                    cwd=root,
-                    skipped=True,
-                    skip_reason="--skip-uvx",
-                ),
-            )
+            for pin in uvx_pins:
+                report.results.append(
+                    run_command(
+                        name,
+                        pin.label,
+                        [],
+                        cwd=root,
+                        skipped=True,
+                        skip_reason="--skip-uvx",
+                    ),
+                )
         elif which("uvx"):
-            report.results.append(
-                run_command(
-                    name,
-                    "uvx",
-                    [
-                        *uvx_ansible_lint_argv(
-                            python=python,
-                            ansible_pin=ansible_pin,
-                        ),
-                        *lint_tail,
-                    ],
-                    cwd=root,
-                    env=deprecation_env,
-                ),
-            )
+            for pin in uvx_pins:
+                report.results.append(
+                    run_command(
+                        name,
+                        pin.label,
+                        [
+                            *uvx_ansible_lint_argv(
+                                python=pin.python,
+                                ansible_pin=pin.ansible_pin,
+                            ),
+                            *lint_tail,
+                        ],
+                        cwd=root,
+                        env=deprecation_env,
+                    ),
+                )
         else:
-            report.results.append(
-                run_command(
-                    name,
-                    "uvx",
-                    [],
-                    cwd=root,
-                    skipped=True,
-                    skip_reason="uvx not on PATH",
-                ),
-            )
+            for pin in uvx_pins:
+                report.results.append(
+                    run_command(
+                        name,
+                        pin.label,
+                        [],
+                        cwd=root,
+                        skipped=True,
+                        skip_reason="uvx not on PATH",
+                    ),
+                )
 
     # --- 3. ansible-lint --strict (project gate or non-playbook files) ---
     run_full_lint = (not skip_ansible_lint) and (
@@ -599,8 +663,10 @@ def format_report(report: CheckReport, *, quiet: bool = False) -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Check Ansible YAML with yamllint and dual-stack "
-            "(system + uvx Python 3.12 / ansible pin) ansible-playbook "
+            "Check Ansible YAML with yamllint and multi-stack "
+            "(system + uvx Python 3.12 / ansible "
+            f"{DEFAULT_ANSIBLE_PIN} + idm-ci "
+            f"{DEFAULT_EXTRA_ANSIBLE_PIN}) ansible-playbook "
             "syntax-check and ansible-lint, including a deprecations gate."
         ),
     )
@@ -629,18 +695,43 @@ def build_parser() -> argparse.ArgumentParser:
         "--ansible-version",
         default=DEFAULT_ANSIBLE_PIN,
         help=(
-            f"Pinned ansible package for uvx (default: {DEFAULT_ANSIBLE_PIN})"
+            "Primary pinned ansible package for uvx "
+            f"(default: {DEFAULT_ANSIBLE_PIN})"
         ),
     )
     parser.add_argument(
         "--python",
         default=DEFAULT_PYTHON,
-        help=f"Python version for uvx (default: {DEFAULT_PYTHON})",
+        help=f"Python version for primary uvx pin (default: {DEFAULT_PYTHON})",
+    )
+    parser.add_argument(
+        "--extra-ansible-version",
+        default=DEFAULT_EXTRA_ANSIBLE_PIN,
+        help=(
+            "Extra uvx ansible pin (idm-ci agent default: "
+            f"{DEFAULT_EXTRA_ANSIBLE_PIN})"
+        ),
+    )
+    parser.add_argument(
+        "--extra-python",
+        default=DEFAULT_EXTRA_PYTHON,
+        help=(
+            "Python version for the extra uvx pin "
+            f"(default: {DEFAULT_EXTRA_PYTHON})"
+        ),
     )
     parser.add_argument(
         "--skip-uvx",
         action="store_true",
-        help="Run system stack only",
+        help="Run system stack only (skip all uvx pins)",
+    )
+    parser.add_argument(
+        "--skip-extra",
+        action="store_true",
+        help=(
+            "Skip the extra uvx pin "
+            f"(ansible=={DEFAULT_EXTRA_ANSIBLE_PIN}); keep primary uvx"
+        ),
     )
     parser.add_argument(
         "--skip-yamllint",
@@ -707,7 +798,10 @@ def main(argv: list[str] | None = None) -> int:
             inventory=args.inventory,
             python=args.python,
             ansible_pin=args.ansible_version,
+            extra_python=args.extra_python,
+            extra_ansible_pin=args.extra_ansible_version,
             skip_uvx=args.skip_uvx,
+            skip_extra=args.skip_extra,
             skip_yamllint=args.skip_yamllint,
             skip_syntax_check=args.skip_syntax_check,
             skip_ansible_lint=args.skip_ansible_lint,
