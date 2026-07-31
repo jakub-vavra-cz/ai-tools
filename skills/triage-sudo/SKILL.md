@@ -5,9 +5,11 @@ description: >-
   scope (sudo_logsrvd / sudo_sendlog vs sudo/sudoers), whether fixed upstream,
   CVSS v4.0 severity suggestion with full reasoning, Jira comment with commit
   links, move valid sudo-affecting issues to Planning, and close-out when
-  logsrvd/sendlog are not shipped. Use when the user asks to triage RHEL-
-  sudo tickets, sudo vulnerabilities, EMBARGOED sudo reports, component sudo
-  unfinished issues, or to close sudo flaws as not shipped.
+  logsrvd/sendlog are not shipped or when the flaw needs only the CRB
+  sudo-python-plugin (not supported in production). Use when the user asks
+  to triage RHEL- sudo tickets, sudo vulnerabilities, EMBARGOED sudo
+  reports, component sudo unfinished issues, or to close sudo flaws as not
+  shipped.
 ---
 
 # Triage RHEL sudo tickets
@@ -106,6 +108,26 @@ Typical layout under that URL:
 
 Example for RHEL 10.3 nightly: [latest-RHEL-10.3 BaseOS](http://download.eng.brq.redhat.com/rhel-10/nightly/RHEL-10/latest-RHEL-10.3/compose/BaseOS/). Use the NVR from the ticket (or the compose `sudo` package) when comparing against upstream tags.
 
+### `sudo-python-plugin` (CRB only)
+
+BaseOS `sudo` does **not** include `python_plugin.so`. The optional subpackage **`sudo-python-plugin`** (ships `usr/libexec/sudo/python_plugin.so`, built with `--enable-python`) is published in **CRB** (CodeReady Builder), e.g.:
+
+```text
+http://download.eng.brq.redhat.com/rhel-10/nightly/RHEL-10/latest-RHEL-10.3/compose/CRB/<arch>/os/Packages/sudo-python-plugin-….rpm
+```
+
+Fedora often ships the same content as a first-class `sudo-python-plugin` package; do not assume RHEL BaseOS matches Fedora.
+
+**CRB support facts (use when scoring RHEL product impact):**
+
+- **Intended use:** CRB is built strictly for development and build-time use.
+- **Production status:** Red Hat explicitly states that CRB packages should not be enabled on runtime deployments or production servers.
+- **Package contents:** primarily auxiliary packages, static libraries, and `-devel` headers needed to compile other software.
+
+If a flaw is reachable **only** with the Python plugin loaded (`group_plugin` → `python_plugin.so`, Python policy/IO plugins, `plugins/python/`, `PyLong_AsLong` / `python_plugin_rc_to_int`, etc.), treat it like other not-supported runtime pieces: recommend **close as Component not Present** for RHEL (step 5), while still recording upstream status. BaseOS still ships C group plugins (`group_file.so`, `system_group.so`); confirm the attack needs the Python bridge before closing.
+
+Verify presence when unsure: list BaseOS `sudo` RPM contents for `python_plugin.so`, and check CRB for `sudo-python-plugin-*.rpm`.
+
 ### Compiler flags / architecture-dependent flaws
 
 If the report depends on **compiler flags**, **CPU arch**, **ABI**, **seccomp**, **ptrace**, **fortify**, or similar build/arch specifics: do not assume all RHEL arches match the reporter’s environment. Check **shipped** packages.
@@ -147,10 +169,13 @@ Decide which binary/path is in the attack surface:
 |--------|----------------|
 | `sudo_logsrvd`, `logsrvd/`, `AcceptMessage`, `RestartMessage`, remote listener | **logsrvd only** |
 | `sudo_sendlog`, `logsrvd/sendlog.c`, client that pushes I/O logs to logsrvd | **sendlog only** |
+| `python_plugin.so`, `plugins/python/`, `sudo-python-plugin`, `group_plugin` + Python callback / `PyLong_AsLong` | **Python plugin** (RHEL: CRB only — see above) |
 | `sudoers`, `plugins/sudoers/`, local policy, `sudo` client, exec/ptrace/intercept | **sudo / sudoers** |
 | Shared `lib/iolog/` | Check **callers** — shared code ≠ both products affected |
 
-RHEL does **not** ship `sudo_logsrvd` or `sudo_sendlog`. If the flaw is logsrvd-only and/or sendlog-only, recommend close-as-not-present (step 5) **in chat**; do not close until the user asks. Still record upstream status for awareness.
+RHEL does **not** ship `sudo_logsrvd` or `sudo_sendlog`. RHEL does **not** ship the Python plugin in BaseOS; `sudo-python-plugin` is CRB-only and not for production runtime. If the flaw is logsrvd-only, sendlog-only, and/or **requires** the Python plugin (and is not reachable via BaseOS sudo/sudoers alone), recommend close-as-not-present (step 5) **in chat**; do not close until the user asks. Still record upstream status for awareness.
+
+If LDAP/`%:` / `group_plugin` logic in shipped `sudoers` is involved, check whether the fail-open or bug also triggers with BaseOS C plugins (`group_file` / `system_group`) or only via Python return codes (e.g. `-1` from conversion errors).
 
 Default `sudo_logsrvd` config uses static `iolog_dir` and `iolog_file=%{seq}`; path-escape configs are non-default (often AC:H).
 
@@ -219,14 +244,14 @@ Fix commits:
 * https://github.com/sudo-project/sudo/commit/<sha> — <one-line>
 * …
 
-*RHEL:* <shipped version status; if logsrvd/sendlog-only note we do not ship them>
+*RHEL:* <shipped version status; if logsrvd/sendlog-only note we do not ship them; if Python-plugin-only note CRB sudo-python-plugin is not for production>
 
 *CVSS v4.0 (proposed):* <vector>; <severity>; see calculator link. Full metric reasoning in chat triage (keep comment brief: vector + one-line severity).
 ```
 
 ---
 
-## 5. Close when logsrvd/sendlog-only (not shipped)
+## 5. Close when not shipped / not supported in production
 
 When scope is **sudo_logsrvd** and/or **sudo_sendlog** only (not the sudo binary / sudoers), recommend this close-out **in chat**. Apply it only when the user explicitly asks to close:
 
@@ -242,11 +267,36 @@ When scope is **sudo_logsrvd** and/or **sudo_sendlog** only (not the sudo binary
 
 Adjust the comment to name only the unshipped piece(s) when one of them is clearly out of scope (e.g. `We do not ship logsrvd in RHEL.`). Use exact VEX string `Component not Present` (see jira-cli reference).
 
+### Python plugin only (`sudo-python-plugin` / CRB)
+
+When the flaw requires **`python_plugin.so`** / the Python plugin bridge and is **not** reachable with BaseOS-only sudo (no production-supported path), recommend the same close-out. Example comment shape:
+
+```text
+*Python group/policy plugin path — not a supported RHEL production runtime component*
+
+…attack path…
+
+*Upstream:* <fixed on main | not fixed>
+*RHEL:* python_plugin.so is only in the CRB sudo-python-plugin subpackage. CRB is for development/build-time use and is not supported on production runtime systems; BaseOS sudo does not include the Python plugin. Closing as Component not Present.
+```
+
+```json
+{
+  "issue_key": "RHEL-…",
+  "comment": "<triage findings; CRB sudo-python-plugin not for production>",
+  "transition": "Closed",
+  "resolution": "Not a Bug",
+  "vex_justification": "Component not Present"
+}
+```
+
+Do **not** use this close if BaseOS sudo/sudoers alone is affected (including C `group_plugin` modules shipped in BaseOS).
+
 ---
 
 ## 6. Valid sudo-affecting bugs → Planning
 
-When triage concludes the issue is a **valid bug that affects shipped sudo / sudoers** (not logsrvd/sendlog-only, not “not a bug”), recommend moving it to **Planning**.
+When triage concludes the issue is a **valid bug that affects shipped BaseOS sudo / sudoers** (not logsrvd/sendlog-only, not Python-plugin-CRB-only, not “not a bug”), recommend moving it to **Planning**.
 
 **Ask first.** Apply only when the user explicitly asks to transition:
 
@@ -259,7 +309,7 @@ When triage concludes the issue is a **valid bug that affects shipped sudo / sud
 
 Use transition name `"Planning"` (RHEL Bug / Vulnerability workflow — see jira-cli reference and status meanings above). Skip if already in Planning or a later status (e.g. In Progress). Can combine with comment and/or `fixed_upstream` label merge in the same `jira_update_issue` call when the user asked for those updates together.
 
-If sudo/sudoers **is** affected: do **not** close; propose Planning (+ comment / `fixed_upstream` as appropriate). Do not invent VEX without user direction.
+If BaseOS sudo/sudoers **is** affected: do **not** close; propose Planning (+ comment / `fixed_upstream` as appropriate). Do not invent VEX without user direction.
 
 ---
 
@@ -267,14 +317,15 @@ If sudo/sudoers **is** affected: do **not** close; propose Planning (+ comment /
 
 ```
 - [ ] Issue fetched (description + version) — read-only OK
-- [ ] Scoped: logsrvd / sendlog / sudo/sudoers (callers checked)
+- [ ] Scoped: logsrvd / sendlog / python-plugin / sudo/sudoers (callers checked)
 - [ ] Only sudo-project used for code/commits
 - [ ] Upstream fix SHAs verified vs RHEL version
+- [ ] If Python-plugin path: confirm BaseOS vs CRB sudo-python-plugin; CRB ≠ production
 - [ ] If arch/compiler-dependent: download+unpack RPMs, check symbols/strings per arch
 - [ ] Findings shown in chat before any Jira write
 - [ ] CVSS v4.0 vector + severity suggested with per-metric reasoning ([cvss-reference.md](cvss-reference.md))
 - [ ] If fixed upstream: propose label `fixed_upstream` (merge with existing labels)
-- [ ] If valid sudo/sudoers impact: propose transition to Planning
+- [ ] If valid BaseOS sudo/sudoers impact: propose transition to Planning
 - [ ] Comment / labels / transitions posted only after explicit user ask
-- [ ] Close only after explicit user ask (logsrvd/sendlog-not-shipped)
+- [ ] Close only after explicit user ask (logsrvd/sendlog/python-plugin-CRB not shipped/supported)
 ```
