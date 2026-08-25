@@ -62,6 +62,17 @@ class CleanTwdTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 clean_twd(Path(tmp))
 
+    def test_accepts_campaign_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            campaign = Path(tmp)
+            twd = campaign / "twd"
+            twd.mkdir()
+            (twd / "metadata.yaml").write_text("domains: []\n")
+            (twd / "runner.log").write_text("x\n")
+            removed = clean_twd(campaign)
+            self.assertIn("runner.log", removed)
+            self.assertFalse((twd / "runner.log").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

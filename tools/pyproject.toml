@@ -18,6 +18,10 @@ scan-python-testcase = "ai_tools.scan_python_testcase:main"
 beetlejuice = "ai_tools.beetlejuice:main"
 is-merged = "ai_tools.is_merged:main"
 clone-review = "ai_tools.clone_review:main"
+sync-twd-tests = "ai_tools.sync_twd_tests:main"
+brew-fetch-nvr = "ai_tools.brew_fetch_nvr:main"
+twd-rpm = "ai_tools.twd_rpm:main"
+te-test-summary = "ai_tools.te_test_summary:main"
 
 [project.optional-dependencies]
 polarion-yaml = ["PyYAML>=6"]

@@ -11,7 +11,7 @@ description: >-
 
 ## When this applies
 
-User needs a **new or updated job metadata file** (`metadata/**/*.yaml`) or a **test-plan job** entry pointing at it. For **running** metadata locally, use [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md). For **writing SSSD system tests**, use [write-sssd-system-tests](../write-sssd-system-tests/SKILL.md).
+User needs a **new or updated job metadata file** (`metadata/**/*.yaml`) or a **test-plan job** entry pointing at it. For **running** metadata locally, use [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md) (`sync-twd-tests` after init clone if the user has local WIP; `te-test-summary` after the test phase). For **writing SSSD system tests**, use [write-sssd-system-tests](../write-sssd-system-tests/SKILL.md).
 
 **Authoritative docs** (read before inventing structure):
 

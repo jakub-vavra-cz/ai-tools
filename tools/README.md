@@ -24,6 +24,10 @@ pip install -e /path/to/ai-tools/tools
 | `beetlejuice` | Import Betelgeuse Polarion XML to Jira (`test-case`; `test-run` planned) |
 | `is-merged` | Check whether a local tip is already on upstream (ancestor / cherry / patch-id) |
 | `clone-review` | Clone a GitHub PR / GitLab MR under `~/git/@REVIEWS` and list changed files |
+| `sync-twd-tests` | Overlay local test WIP onto an IdM-CI campaign sibling of `twd` |
+| `brew-fetch-nvr` | Download brewroot binary RPMs for a Fixed in Build NVR into `twd/brew-rpms/` |
+| `twd-rpm` | Query or install those RPMs on twd inventory hosts (default group: `client`) |
+| `te-test-summary` | Extract the pytest/te short summary from a `twd` for a Jira draft |
 
 ### clean-twd
 
@@ -282,6 +286,72 @@ clone-review URL --root ~/git/@REVIEWS --no-refresh
 | `-q` | Omit file list / diffstat from text output |
 
 Exit `0` on success, `2` on error.
+
+### sync-twd-tests
+
+Overlay a local test checkout onto the campaign clone next to `twd` (after
+`te` init/prep git clone). Dest is inferred from `pytest-mh:` / `pytests:` /
+`restraint:` in `metadata.yaml`. Excludes `.git`, `.venv`, `__pycache__`,
+`.pytest_cache`. Does **not** `--delete`. Dest must be a sibling of a
+validated twd (or a path under that sibling), never inside `twd`.
+
+Used by [ticket-pre-verification](../skills/ticket-pre-verification/SKILL.md).
+
+```bash
+cd ~/git/@TESTRUNS/<campaign>/twd
+sync-twd-tests ~/git/sudoup-fork-regex_escape --json
+sync-twd-tests ~/git/sudo-tests/pytest --twd . -n
+sync-twd-tests /path/to/tree --twd ~/git/@TESTRUNS/<campaign> --dest ../sudo-tests
+```
+
+### brew-fetch-nvr
+
+Download binary RPMs for an NVR from brewroot (client arch + `noarch`).
+Skips `src/`, `data/`, `*debuginfo*`, `*debugsource*`. Default dest is
+`<twd>/brew-rpms/`. Override the brew host only via `--base-url` or
+`$BREWROOT_PACKAGES`. Optional: `REQUESTS_CA_BUNDLE` for corp TLS.
+
+```bash
+brew-fetch-nvr sudo-1.9.17-5.p2.el10_2 --twd . --json
+brew-fetch-nvr sudo-1.9.17-5.p2.el10_2 --twd . --arch x86_64 --arch aarch64
+brew-fetch-nvr sudo-1.9.17-5.p2.el10_2 --dest /tmp/rpms
+```
+
+### twd-rpm
+
+Query installed NVRs or `dnf install` RPMs on twd inventory hosts via
+ansible (`config/test.inventory.yaml`, become root). **`--hosts` defaults
+to `client`**; pass any inventory group or host pattern (`ipa`, `dns`,
+`client:ipa`, a hostname, `all`).
+
+```bash
+twd-rpm query --nvr sudo-1.9.17-5.p2.el10_2 --twd . --json
+twd-rpm query --nvr sudo-1.9.17-5.p2.el10_2 --hosts ipa
+twd-rpm install --twd . --json
+twd-rpm install --hosts dns --rpm-dir ./brew-rpms -n
+```
+
+`query` prints `older` / `same` / `newer` / `missing` per host. `install`
+copies `brew-rpms/` and runs `dnf install -y`. Exit `0` on success, `1` on
+ansible/dnf failure, `2` on bad NVR/args.
+
+### te-test-summary
+
+Pull the last pytest short summary from `twd/runner.log` (else `*junit.xml`)
+plus `pytest-run.rc`. Prints the Jira draft snippet (`Complete!` / `PASSED` /
+`FAILED` / totals). Does **not** post to Jira. `--upgraded NEVRA` (repeatable)
+prepends the `Upgraded:` block.
+
+```bash
+te-test-summary --twd . --json
+te-test-summary --twd ~/git/@TESTRUNS/<campaign> \
+  --upgraded sudo-1.9.17-5.p2.el10_2.x86_64 \
+  --upgraded sudo-python-plugin-1.9.17-5.p2.el10_2.x86_64
+```
+
+JSON includes `rc`, `outcome` (`passed`/`failed`/`unknown`), passed/failed
+names, `snippet`, and `draft`. Exit `0` on a successful parse (even if tests
+failed), `2` if there is no summary.
 
 ## Tests
 

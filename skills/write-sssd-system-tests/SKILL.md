@@ -46,7 +46,9 @@ Each test should use RST-style fields in the docstring so tooling and reviewers 
 - **`:steps:`** — numbered actions (start with the scenario under test).
 - **`:expectedresults:`** — numbered outcomes aligned with steps.
 - **`:customerscenario:`** — `True` or `False`.
-- **`:requirement:`** — traceability id or `None` when allowed by project rules.
+- **`:requirement:`** — real traceability id only (module-level and/or per-test).
+  **Never** write `:requirement: None`. If there is no requirement id, omit the
+  field entirely.
 
 Optional **`:description:`** for extra context. Keep test code aligned in order with **setup → steps** so the docstring matches execution.
 
@@ -69,6 +71,19 @@ Optional **`:description:`** for extra context. Keep test code aligned in order 
 
 Do not treat the task as finished until that workflow is satisfied for all touched Python files.
 
+## Running the new tests (IdM-CI campaign)
+
+Execution is [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md). After `te --upto prep`, overlay **this** tree onto the campaign sibling — do not symlink:
+
+```bash
+cd ~/git/@TESTRUNS/<campaign>/twd
+sync-twd-tests /path/to/this/checkout --twd . --json
+te --phase test metadata.yaml
+te-test-summary --twd . --json
+```
+
+On re-runs: `clean-twd`, then `sync-twd-tests` again, then `te --phase test`.
+
 ## Style and naming
 
 - Broader CI for framework and SSSD trees may also run **isort**, **mypy**, **pycodestyle** (e.g. **`tox`**). Match surrounding imports in `src/tests/system` when the project enforces them.
@@ -82,9 +97,10 @@ Do not treat the task as finished until that workflow is satisfied for all touch
 ## Quick checklist for new tests
 
 1. Correct **`test_*.py`** file and **`@pytest.mark.topology`** for the scenario.
-2. Full docstring fields (**title**, **setup**, **steps**, **expectedresults**, **customerscenario**, **requirement**).
+2. Docstring fields (**title**, **setup**, **steps**, **expectedresults**, **customerscenario**); add **requirement** only with a real id — never `:requirement: None`.
 3. Minimal provider objects and SSSD settings; **`client.sssd.start()`** after configuration.
 4. Assertions that match documented **expectedresults** line by line.
 5. Run lint/format on all changed `.py` files per [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md); run any additional project checks (mypy, etc.) if required by that tree.
+6. If executing on a campaign: overlay with **`sync-twd-tests`**, run `te --phase test`, report with **`te-test-summary`** ([run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md)).
 
 For deeper concepts and examples, prefer [Writing system tests](https://tests.sssd.io/en/latest/concepts.html) and the pytest-mh **example** tree in its repository.

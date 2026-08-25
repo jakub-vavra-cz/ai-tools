@@ -17,17 +17,26 @@ def is_twd_directory(twd: Path) -> bool:
     return any((twd / marker).exists() for marker in TWD_MARKERS)
 
 
+def require_twd(twd: Path) -> Path:
+    """Resolve a validated twd, or ``<path>/twd`` when *twd* is a campaign root."""
+    twd = twd.expanduser().resolve()
+    if twd.is_dir() and is_twd_directory(twd):
+        return twd
+    nested = twd / "twd"
+    if nested.is_dir() and is_twd_directory(nested):
+        return nested
+    if not twd.is_dir():
+        raise ValueError(f"Not a directory: {twd}")
+    markers = ", ".join(TWD_MARKERS)
+    raise ValueError(f"Not a twd directory (expected one of: {markers}): {twd}")
+
+
 def clean_twd(twd: Path, *, dry_run: bool = False) -> list[str]:
     """Delete logs/ contents and twd-root junit/runner artifacts.
 
     Returns paths removed, relative to ``twd``.
     """
-    twd = twd.resolve()
-    if not twd.is_dir():
-        raise ValueError(f"Not a directory: {twd}")
-    if not is_twd_directory(twd):
-        markers = ", ".join(TWD_MARKERS)
-        raise ValueError(f"Not a twd directory (expected one of: {markers}): {twd}")
+    twd = require_twd(twd)
 
     removed: list[str] = []
 

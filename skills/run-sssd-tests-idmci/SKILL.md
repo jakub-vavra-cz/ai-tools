@@ -5,11 +5,12 @@ description: >-
   ~/git/@TESTRUNS/<name>/twd, job metadata.yaml, and `te` (provision with --upto prep,
   test with --phase test, teardown with --phase teardown). For provider: aws, requires
   a valid Kerberos TGT and `aws-saml.py --region=us-east-1 --role 099686300931-poweruser
-  --sessionduration 14400` before provision. Uses `clean-twd` on test re-runs only to
-  clear stale twd artifacts; reads junit/logs for diagnosis. Also covers pytest-mh /
+  --sessionduration 14400` before provision. Uses `clean-twd` on test re-runs only,
+  `sync-twd-tests` to overlay local/unpushed tests onto the campaign clone, and
+  `te-test-summary` for the pytest short summary. Also covers pytest-mh /
   sssd-test-framework and in-repo pytest when not using cloud provision. Use for
-  @TESTRUNS, twd, idm-ci, metadata.yaml, mrack, clean-twd, AWS/OpenStack provision, or
-  SSSD/sudo system tests.
+  @TESTRUNS, twd, idm-ci, metadata.yaml, mrack, clean-twd, sync-twd-tests,
+  te-test-summary, AWS/OpenStack provision, or SSSD/sudo system tests.
 ---
 
 # Run SSSD tests (IdM-CI)
@@ -20,7 +21,13 @@ User wants tests **executed** (not just suggested). Run them yourself via the Sh
 
 For **authoring** SSSD system tests, use [write-sssd-system-tests](../write-sssd-system-tests/SKILL.md). For **Python lint/format** after edits, use [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md).
 
-For **cleaning twd** before a test re-run, use the **`clean-twd`** CLI from [ai-tools/tools](../../tools/README.md) (install once: `pip install -e ~/git/ai-tools/tools`).
+Approved CLIs from [ai-tools/tools](../../tools/README.md) (install once: `pip install -e ~/git/ai-tools/tools`). Use these instead of ad-hoc `rsync` / `rm` / scraping `runner.log`:
+
+| CLI | When |
+|-----|------|
+| **`clean-twd`** | Before a **test re-run** on existing hosts (not the first test after `--upto prep`) |
+| **`sync-twd-tests`** | After prep (and before every test run) when the user has **local/unpushed** tests to overlay onto the campaign sibling. Dest comes from `pytest-mh:` / `pytests:` in metadata. No `--delete`. Do not symlink the user’s checkout. |
+| **`te-test-summary`** | After a test phase: last pytest short summary, `rc`, PASSED/FAILED names. Do not paste the whole `runner.log`. |
 
 ---
 
@@ -90,19 +97,25 @@ Adapt from a similar campaign under `~/git/@TESTRUNS/` or from `idm-ci/metadata/
 ```bash
 mkdir -p ~/git/@TESTRUNS/<campaign>/twd
 # Write twd/metadata.yaml (domains + phases) — see idm-ci docs above
-# Clone sibling test repos beside twd when metadata references ../sudo-tests, ../sssd, etc.
+# Let init clone sibling test repos (../sudo-tests, ../sssd, …). Do not symlink
+# the user’s checkout — overlay local WIP with sync-twd-tests after prep.
 # If metadata uses provider: aws — ensure valid Kerberos TGT, then:
 #   aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400
 
 cd ~/git/@TESTRUNS/<campaign>/twd
 te --upto prep metadata.yaml         # provision: init → allocate cloud VMs → prep SUTs
+# If the user has local/unpushed tests (fork, extra commit):
+sync-twd-tests <local-test-dir> --twd . --json
 te --phase test metadata.yaml        # first test run (no clean-twd)
+te-test-summary --twd . --json       # short summary for the report
 te --phase teardown metadata.yaml    # free cloud resources when done
 te metadata.yaml                       # full job in one go (provision + test + teardown)
 
 # Re-run tests on the same provisioned hosts:
 clean-twd                            # only for re-runs — clears prior logs/junit
+sync-twd-tests <local-test-dir> --twd . --json   # when overlaying WIP
 te --phase test metadata.yaml
+te-test-summary --twd . --json
 ```
 
 When changing topology or prep, edit **`metadata.yaml`** (or the named file you pass to `te`), then re-provision or re-run from the appropriate phase.
@@ -124,7 +137,7 @@ This runs phases through **`prep`** inclusive:
 | **provision** | Allocates VMs via mrack (`provision/mrack-up.yaml`, `provision/wait.yaml`) — OpenStack, Beaker, or AWS depending on metadata |
 | **prep** | Installs packages, configures domains, runs playbooks on live hosts |
 
-After `--upto prep` succeeds, `config/test.inventory.yaml` and `config/pytest-mh.yaml` reflect the live topology — run **`te --phase test metadata.yaml`** (no `clean-twd` on the first run). Check `mrack.log` and `runner.log` if provision or prep fails; do not run the test phase until inventory is populated.
+After `--upto prep` succeeds, `config/test.inventory.yaml` and `config/pytest-mh.yaml` reflect the live topology. If the user gave a local test tree (unpushed WIP, fork), **`sync-twd-tests <local-test-dir> --twd .`** before the first test — init’s git clone is the pushed branch only. Then run **`te --phase test metadata.yaml`** (no `clean-twd` on the first run). After the test phase, **`te-test-summary --twd . --json`**. Check `mrack.log` and `runner.log` if provision or prep fails; do not run the test phase until inventory is populated.
 
 #### AWS provider prerequisites (`provider: aws`)
 
@@ -150,7 +163,7 @@ Do not start AWS provision until the TGT, `aws-saml.py`, and `get-caller-identit
 
 Use **`clean-twd` only when re-running tests** on already provisioned hosts — not before the first `te --phase test` after `--upto prep`, and not during a continuous full `te metadata.yaml` job. Skip `clean-twd` if `twd` has no prior test artifacts (no stale `runner.log`, junit, or logs from a previous test phase).
 
-When re-running (`te --phase test`, `te --phases prep:test`, or a second test pass after fixing code), run `clean-twd` from `twd` first so old and new results are not mixed. Do not use ad-hoc `rm` when `clean-twd` is available.
+When re-running (`te --phase test`, `te --phases prep:test`, or a second test pass after fixing code), run `clean-twd` from `twd` first so old and new results are not mixed. Do not use ad-hoc `rm` when `clean-twd` is available. If tests were overlaid from a local tree, run **`sync-twd-tests`** again after `clean-twd` (clean does not touch campaign siblings, but the overlay must still match the latest local files).
 
 **Install** (once per environment):
 
@@ -184,6 +197,20 @@ It validates the path looks like a twd before deleting. Exit code `1` means the 
 
 **Diagnose first** — read existing logs/junit when investigating a failure. **Clean only on re-run** — run `clean-twd` before the next test attempt, not before the initial test pass.
 
+### Overlay local tests (`sync-twd-tests`)
+
+Init clones test/framework repos from git (`force: yes` replaces `dest`). That clone is the **pushed** tree. When the user has a **local checkout** (unpushed commits, a fork whose basename is not `sudo-tests` / `sssd`, extra files), overlay it onto the campaign sibling — do **not** symlink into `@TESTRUNS`.
+
+```bash
+cd ~/git/@TESTRUNS/<campaign>/twd
+sync-twd-tests ~/git/<local-test-dir> --twd . --json
+sync-twd-tests ~/git/<local-test-dir> --twd . -n   # dest + file list, no copy
+```
+
+Dest is inferred from `pytest-mh:` / `pytests:` / `restraint:` in `metadata.yaml` (or `config/metadata.yaml`). Excludes `.git`, `.venv`, `__pycache__`, `.pytest_cache`. Overlay only — no `--delete` (prep may have installed a `.venv` in the clone). Skip this step only when the campaign sibling already is the intended tree (init clone matches what the user wants to run).
+
+Repeat before **every** `te --phase test`, including after `clean-twd`.
+
 ### Free resources (teardown)
 
 To **destroy provisioned cloud VMs** and release mrack/OpenStack resources:
@@ -202,11 +229,14 @@ Orchestration is **`te`** (`idm-ci/scripts/te`). First argument is always the **
 ```bash
 cd ~/git/@TESTRUNS/<campaign>/twd
 te --upto prep metadata.yaml         # provision only (typical first step)
+sync-twd-tests <local-test-dir> --twd . --json   # when overlaying WIP
 te --phase test metadata.yaml        # first test run (no clean-twd)
+te-test-summary --twd . --json
 te --phase teardown metadata.yaml    # free cloud resources (mrack destroy)
 
 # Re-run only:
 clean-twd
+sync-twd-tests <local-test-dir> --twd . --json   # when overlaying WIP
 te --phase test metadata.yaml
 te --phases prep:test metadata.yaml  # re-prep and test (clean-twd before if re-running test)
 te metadata.yaml                     # full job including teardown
@@ -219,9 +249,15 @@ The **test** phase runs `pytest-mh:` / `pytests:` steps. Extra pytest filtering 
 
 ### Inspect existing results
 
-When **diagnosing** a prior run (not starting a fresh one), check:
+When **diagnosing** a prior run (not starting a fresh one), start with **`te-test-summary`**, then open logs only as needed:
 
-For **Jenkins CI failures**, start from the build URL using [analyze-jenkins-failure](../analyze-jenkins-failure/SKILL.md) to fetch console output, artifact logs, and `metadata.mod.yaml`.
+```bash
+te-test-summary --twd . --json
+```
+
+That prints `rc`, `outcome`, PASSED/FAILED names, and the short summary (`Complete!` block). Do not dump the entire `runner.log` into the user report.
+
+For **Jenkins CI failures**, start from the build URL using [analyze-jenkins-failure](../analyze-jenkins-failure/SKILL.md) to fetch console output, artifact logs, and `metadata.mod.yaml`. Then `te-test-summary --twd <artifact-dir>` when `runner.log` or `*junit.xml` is in that dump.
 
 | File | Meaning |
 |------|---------|
@@ -236,8 +272,8 @@ For **Jenkins CI failures**, start from the build URL using [analyze-jenkins-fai
 
 | Situation | Use |
 |-----------|-----|
-| New multihost run, mrack/OpenStack | Create `twd/metadata.yaml`, then `te --upto prep`, then `te --phase test` |
-| Re-run tests on existing hosts | `clean-twd` then `te --phase test metadata.yaml` |
+| New multihost run, mrack/OpenStack | Create `twd/metadata.yaml`, then `te --upto prep`, overlay local tests if needed (`sync-twd-tests`), then `te --phase test` |
+| Re-run tests on existing hosts | `clean-twd`, overlay if needed, then `te --phase test metadata.yaml` |
 | User mentions @TESTRUNS, twd, campaign, metadata | `~/git/@TESTRUNS/<campaign>/twd` |
 | Local containers only (`sssd-ci-containers`, `mhc.yaml`) | in-repo / CI-style pytest (below) |
 | Unit, tox, `make check` | source repo (below) |
@@ -387,9 +423,9 @@ make -C Sanity/run-as
 
 ## 5. Interpret results and iterate
 
-1. Capture **exit code**, failing test names, and the **last useful traceback** (not the entire log unless needed).
+1. Run **`te-test-summary --twd . --json`** (or `--twd` the campaign). Use `rc`, `outcome`, and PASSED/FAILED names. Capture the **last useful traceback** from `logs/*_pytest-run.log` only when the short summary is not enough.
 2. **Classify** failure: test bug, product bug, environment (missing container, DNS, package), or flaky infra.
-3. **Fix and re-run** the same scoped command after code or test changes until green or blocked.
+3. **Fix and re-run** the same scoped command after code or test changes until green or blocked. Re-runs: `clean-twd`, then `sync-twd-tests` if overlaying WIP, then `te --phase test`.
 4. When blocked on environment, state exactly what is missing and what passed locally.
 
 ---
@@ -399,7 +435,7 @@ make -C Sanity/run-as
 Summarize:
 
 - Commands run (cwd + key args)
-- Pass/fail counts or `make check` result
+- Pass/fail from **`te-test-summary`** (`rc`, `outcome`, FAILED names, short summary) — not a paste of `runner.log`
 - Failures with file::test and one-line cause
 - Environment gaps (no containers, no build dir, missing venv)
 - Wider suites not run yet, if any
@@ -408,12 +444,13 @@ Summarize:
 
 ## Order of operations
 
-1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](https://docs-idmci.psi.redhat.com/user_docs/guide.html#_job_metadata_basics)). If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400` before provision. Provision with `te --upto prep metadata.yaml` if hosts are not up. Diagnose prior runs from junit/logs first.
+1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](https://docs-idmci.psi.redhat.com/user_docs/guide.html#_job_metadata_basics)). If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400` before provision. Provision with `te --upto prep metadata.yaml` if hosts are not up. Diagnose prior runs with **`te-test-summary`**, then junit/logs.
 2. **Discover** other test entry points (in-repo, then CI).
 3. **Scope** to the user’s change or named test.
 4. **Prepare** — venv, build dir, AWS creds when needed, `te --upto prep` (cloud provision), or local containers as required.
-5. **Re-run?** — If tests already ran in this `twd`, **`clean-twd`** before the next test phase (install: `pip install -e ~/git/ai-tools/tools`). Skip on first test pass after provision.
-6. **Run** the narrowest relevant command.
-7. **Diagnose** failures; fix or report blockers.
-8. **Widen** scope only when appropriate.
-9. **Teardown** — `te --phase teardown metadata.yaml` when cloud hosts should be released.
+5. **Overlay?** — If the user has local/unpushed tests, **`sync-twd-tests <dir> --twd .`** after prep (and again before every test re-run). Do not symlink.
+6. **Re-run?** — If tests already ran in this `twd`, **`clean-twd`** before the next test phase (install: `pip install -e ~/git/ai-tools/tools`). Skip on first test pass after provision.
+7. **Run** the narrowest relevant command (`te --phase test` for campaigns).
+8. **Diagnose** with **`te-test-summary --twd . --json`**; fix or report blockers.
+9. **Widen** scope only when appropriate.
+10. **Teardown** — `te --phase teardown metadata.yaml` when cloud hosts should be released.
