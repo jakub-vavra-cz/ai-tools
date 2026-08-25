@@ -162,16 +162,21 @@ Follow nearby code; for new modules (especially under `ai-tools/tools`) prefer:
    (parse → call library → print).
 6. **Explicit errors**: domain `SomethingError(RuntimeError)` for library code;
    map to `click.ClickException` (and a stable `exit_code`) at the CLI boundary.
-7. **Subprocess**: prefer `subprocess.run(..., capture_output=True, text=True)` with
+7. **Catch specific exceptions** — never bare `except:` or `except Exception` /
+   `except BaseException`. Catch the type the call actually raises (e.g.
+   `ProcessError`, `OSError`, `KeyError`, `click.ClickException`), or a narrow
+   union/tuple of those types. Broad catches hide bugs; if cleanup must ignore
+   failure, name the expected failure class and `pass` only that.
+8. **Subprocess**: prefer `subprocess.run(..., capture_output=True, text=True)` with
    checked return codes; do not shell out through `shell=True` unless required.
-8. **No secrets** in source; read tokens from the environment like sibling tools.
-9. **Tests**: `unittest` under `tests/` for parsers, path safety, and CLI exit
-   mapping; mock network/subprocess at the boundary.
-10. **Comments / docstrings**: caveman **lite** — brief, full sentences, no filler
+9. **No secrets** in source; read tokens from the environment like sibling tools.
+10. **Tests**: `unittest` under `tests/` for parsers, path safety, and CLI exit
+    mapping; mock network/subprocess at the boundary.
+11. **Comments / docstrings**: caveman **lite** — brief, full sentences, no filler
     (see **Comments and docstrings** above).
 
-Avoid: bare `except:`, mutable default args, importing `*` , new argparse parsers,
-and reformatting unrelated files.
+Avoid: bare `except:`, `except Exception`, mutable default args, importing `*`,
+new argparse parsers, and reformatting unrelated files.
 
 ---
 
