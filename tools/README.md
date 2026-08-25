@@ -28,6 +28,7 @@ pip install -e /path/to/ai-tools/tools
 | `brew-fetch-nvr` | Download brewroot binary RPMs for a Fixed in Build NVR into `twd/brew-rpms/` |
 | `twd-rpm` | Query or install those RPMs on twd inventory hosts (default group: `client`) |
 | `te-test-summary` | Extract the pytest/te short summary from a `twd` for a Jira draft |
+| `run-idm-jenkins` | Upload metadata as an sssd-qe GitLab snippet; print Jenkins trigger params |
 
 ### clean-twd
 
@@ -352,6 +353,63 @@ te-test-summary --twd ~/git/@TESTRUNS/<campaign> \
 JSON includes `rc`, `outcome` (`passed`/`failed`/`unknown`), passed/failed
 names, `snippet`, and `draft`. Exit `0` on a successful parse (even if tests
 failed), `2` if there is no summary.
+
+### run-idm-jenkins
+
+Upload a job metadata file as a **project snippet** on `sssd/sssd-qe` and print
+the Jenkins parameters for MCP `user-jenkins` / `trigger_build`
+(`User-Tools/trigger-test-suite-tool`). Pass **`--trigger`** to POST
+`buildWithParameters` via the Jenkins REST API when MCP is unavailable.
+
+Requires `glab` authenticated to `gitlab.cee.redhat.com`. `--trigger` also needs
+`JENKINS_USERNAME` / `JENKINS_PASSWORD` (and optional `JENKINS_URL`,
+`REQUESTS_CA_BUNDLE`). Used by
+[run-idm-jenkins](../skills/run-idm-jenkins/SKILL.md).
+
+```bash
+run-idm-jenkins path/to/metadata.yaml --json
+run-idm-jenkins path/to/metadata.yaml --json \
+  --idmci-gitrepo https://gitlab.cee.redhat.com/<user>/idm-ci.git \
+  --idmci-gitbranch topic
+run-idm-jenkins path/to/metadata.yaml --json \
+  --idmci-checkout ~/git/idmci-fork-topic
+run-idm-jenkins path/to/metadata.yaml --json \
+  --idmci-replace-os 'rhel:rhel-10.2|windows:win-2025' \
+  --idmci-replace-token 'SUITE:-k="test_gpo"|NAME:gpo' \
+  --idmci-compose-url 'https://download.example/compose/' \
+  --idmci-provider openstack
+run-idm-jenkins path/to/metadata.yaml --json --envvar-file envvar.txt
+run-idm-jenkins path/to/metadata.yaml --json --trigger
+run-idm-jenkins path/to/metadata.yaml -n --json   # dry-run, no snippet
+```
+
+| Flag | Purpose |
+|------|---------|
+| `metadata` | Path to the YAML job file |
+| `--idmci-gitrepo` | Custom IdM-CI git URL (`IDMCI_GITREPO`; env `IDMCI_GITREPO`) |
+| `--idmci-gitbranch` | Custom IdM-CI branch (`IDMCI_GITBRANCH` → Jenkins `IDMCI_BRANCH`) |
+| `--idmci-checkout` | Infer repo URL + branch from a local idm-ci clone |
+| `--idmci-replace-os` | `IDMCI_REPLACE_OS` |
+| `--idmci-replace-token` | `IDMCI_REPLACE_TOKEN` |
+| `--idmci-compose-url` | `IDMCI_COMPOSE_URL` |
+| `--idmci-provider` | `IDMCI_PROVIDER` (`openstack` / `aws` / `beaker`) |
+| `--envvar-file` | Load params from artifact `envvar.txt` (skips secrets/empty) |
+| `--trigger` | POST Jenkins `buildWithParameters` (MCP fallback) |
+| `--jenkins-url` | Jenkins base URL (`JENKINS_URL`; default idmops-ci) |
+| `--trigger-wait` | Seconds to wait for a build URL after `--trigger` (default 15; `0` skips) |
+| `--param KEY=VALUE` | Extra Jenkins parameter (repeatable) |
+| `--repo` | Snippet project (default `sssd/sssd-qe`) |
+| `--hostname` | GitLab host (default `gitlab.cee.redhat.com`) |
+| `-n` / `--dry-run` | Skip snippet create |
+| `--json` | Machine-readable result |
+
+`run-idm-jenkins --help` lists every `IDMCI_*` trigger-test-suite-tool flag
+(`--idmci-is-fips`, `--idmci-brew-task-id`, `--idmci-skip-teardown`, …).
+
+JSON includes `jenkins_job`, `jenkins_parameters` (pass this dict to
+`trigger_build` unless `--trigger` was used), `snippet.raw_url` / `web_url`,
+`idmci_gitrepo` / `idmci_gitbranch`, and `trigger` when the REST fallback ran.
+Exit `0` on success, `2` on error.
 
 ## Tests
 

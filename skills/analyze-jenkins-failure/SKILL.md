@@ -17,6 +17,7 @@ User provides a **Jenkins job/build URL** (or asks to debug a failed IdM-CI / SS
 Related skills:
 
 - [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md) — run `te`, overlay local tests (`sync-twd-tests`), `te-test-summary`, `clean-twd`
+- [run-idm-jenkins](../run-idm-jenkins/SKILL.md) — trigger `User-Tools/trigger-test-suite-tool` from metadata (snippet `IDMCI_METADATA_URL`)
 - [create-idmci-metadata](../create-idmci-metadata/SKILL.md) — edit metadata when reproduction needs tweaks
 
 ---

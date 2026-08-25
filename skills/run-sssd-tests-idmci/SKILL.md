@@ -19,7 +19,7 @@ description: >-
 
 User wants tests **executed** (not just suggested). Run them yourself via the Shell tool, report pass/fail, and diagnose failures. Do not mark the task done while relevant tests are still failing unless the user accepts that.
 
-For **authoring** SSSD system tests, use [write-sssd-system-tests](../write-sssd-system-tests/SKILL.md). For **Python lint/format** after edits, use [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md).
+For **authoring** SSSD system tests, use [write-sssd-system-tests](../write-sssd-system-tests/SKILL.md). For **running metadata on Jenkins** (`trigger-test-suite-tool`), use [run-idm-jenkins](../run-idm-jenkins/SKILL.md). For **Python lint/format** after edits, use [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md).
 
 Approved CLIs from [ai-tools/tools](../../tools/README.md) (install once: `pip install -e ~/git/ai-tools/tools`). Use these instead of ad-hoc `rsync` / `rm` / scraping `runner.log`:
 

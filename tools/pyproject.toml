@@ -22,6 +22,7 @@ sync-twd-tests = "ai_tools.sync_twd_tests:main"
 brew-fetch-nvr = "ai_tools.brew_fetch_nvr:main"
 twd-rpm = "ai_tools.twd_rpm:main"
 te-test-summary = "ai_tools.te_test_summary:main"
+run-idm-jenkins = "ai_tools.run_idm_jenkins:main"
 
 [project.optional-dependencies]
 polarion-yaml = ["PyYAML>=6"]

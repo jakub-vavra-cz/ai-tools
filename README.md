@@ -62,6 +62,7 @@ pip install -e /path/to/ai-tools/tools
 | `check-ansible` | yamllint + dual-stack ansible syntax-check / ansible-lint |
 | `dump-polarion-testcase` / `import-jira-testcase` / `scan-python-testcase` / `beetlejuice` | Polarion ↔ Jira RHELTEST Test Case helpers |
 | `is-merged` | Check whether a local tip is already on upstream |
+| `run-idm-jenkins` | Upload metadata as an sssd-qe snippet; print Jenkins `trigger_build` params; `--trigger` uses the Jenkins REST API |
 
 See [tools/README.md](tools/README.md).
 
@@ -78,6 +79,7 @@ See [tools/README.md](tools/README.md).
 | `review-changes` | Clone a PR/MR, lint changed files, and review diff quality |
 | `run-python-static-code-analysis` | Lint and format Python edits using project-configured tools |
 | `run-sssd-tests-idmci` | IdM-CI / @TESTRUNS multihost tests (`~/git/@TESTRUNS`, `twd/metadata.yaml`, `te`); pytest-mh and in-repo pytest |
+| `run-idm-jenkins` | Upload metadata as an sssd-qe GitLab snippet and trigger Jenkins `User-Tools/trigger-test-suite-tool` (`IDMCI_METADATA_URL`, optional `IDMCI_GITREPO` / `IDMCI_GITBRANCH`) |
 | `write-sssd-system-tests` | Author SSSD multihost system tests with sssd-test-framework / pytest-mh |
 
 Skills live under `skills/<name>/SKILL.md`. Cursor loads them from `~/git/.cursor/skills`, which symlinks here.

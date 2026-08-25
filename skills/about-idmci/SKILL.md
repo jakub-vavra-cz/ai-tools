@@ -34,6 +34,7 @@ If the clone is still missing, create/update via `create_worktree_branch` / `lis
 |------|-------|
 | Author `metadata.yaml` / test-plan jobs | [create-idmci-metadata](../create-idmci-metadata/SKILL.md) |
 | Run `te` / `@TESTRUNS` campaigns | [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md) |
+| Run metadata on Jenkins (`trigger-test-suite-tool`) | [run-idm-jenkins](../run-idm-jenkins/SKILL.md) |
 | Diagnose a Jenkins build URL | [analyze-jenkins-failure](../analyze-jenkins-failure/SKILL.md) |
 
 This skill is for **understanding and explaining** IdM-CI. After answering, suggest the hand-off skill only if the user wants to implement or run something.
