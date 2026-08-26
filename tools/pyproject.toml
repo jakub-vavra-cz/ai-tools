@@ -23,6 +23,10 @@ brew-fetch-nvr = "ai_tools.brew_fetch_nvr:main"
 twd-rpm = "ai_tools.twd_rpm:main"
 te-test-summary = "ai_tools.te_test_summary:main"
 run-idm-jenkins = "ai_tools.run_idm_jenkins:main"
+decompress-logs = "ai_tools.decompress_logs:main"
+jenkins-to-testrun = "ai_tools.jenkins_to_testrun:main"
+artifact-grep = "ai_tools.artifact_grep:main"
+idmci-rerun-failed = "ai_tools.idmci_rerun_failed:main"
 
 [project.optional-dependencies]
 polarion-yaml = ["PyYAML>=6"]

@@ -237,6 +237,29 @@ def newest_junit(twd: Path) -> Path | None:
     return max(files, key=lambda path: path.stat().st_mtime)
 
 
+def failed_nodeids_from_twd(twd: Path, *, log: Path | None = None) -> list[str]:
+    """Return FAILED/ERROR pytest nodeids from the last twd run."""
+    summary = summarize_twd(twd, log=log)
+    return list(summary.failed) + list(summary.errors)
+
+
+def build_pytest_k_filter(nodeids: list[str]) -> str:
+    """Build a pytest ``-k`` expression from nodeids or test names."""
+    names: list[str] = []
+    for nodeid in nodeids:
+        name = nodeid.rsplit("::", 1)[-1].strip()
+        if name.endswith(")"):
+            name = name.rsplit(" ", 1)[0]
+        if name and name not in names:
+            names.append(name)
+    if not names:
+        raise TeSummaryError("no failed tests to re-run")
+    if len(names) == 1:
+        return f"-k {names[0]}"
+    joined = " or ".join(names)
+    return f'-k "{joined}"'
+
+
 def summarize_twd(
     twd: Path,
     *,

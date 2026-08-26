@@ -7,10 +7,12 @@ description: >-
   a valid Kerberos TGT and `aws-saml.py --region=us-east-1 --role 099686300931-poweruser
   --sessionduration 14400` before provision. Uses `clean-twd` on test re-runs only,
   `sync-twd-tests` to overlay local/unpushed tests onto the campaign clone, and
-  `te-test-summary` for the pytest short summary. Also covers pytest-mh /
+  `te-test-summary` for the pytest short summary, `jenkins-to-testrun` for Jenkins
+  reproduction setup, `idmci-rerun-failed` to re-run only failed tests, and
+  `decompress-logs` for manual gzip artifact dumps. Also covers pytest-mh /
   sssd-test-framework and in-repo pytest when not using cloud provision. Use for
   @TESTRUNS, twd, idm-ci, metadata.yaml, mrack, clean-twd, sync-twd-tests,
-  te-test-summary, AWS/OpenStack provision, or SSSD/sudo system tests.
+  te-test-summary, jenkins-to-testrun, idmci-rerun-failed, decompress-logs, AWS/OpenStack provision, or SSSD/sudo system tests.
 ---
 
 # Run SSSD tests (IdM-CI)
@@ -28,6 +30,10 @@ Approved CLIs from [ai-tools/tools](../../tools/README.md) (install once: `pip i
 | **`clean-twd`** | Before a **test re-run** on existing hosts (not the first test after `--upto prep`) |
 | **`sync-twd-tests`** | After prep (and before every test run) when the user has **local/unpushed** tests to overlay onto the campaign sibling. Dest comes from `pytest-mh:` / `pytests:` in metadata. No `--delete`. Do not symlink the user’s checkout. |
 | **`te-test-summary`** | After a test phase: last pytest short summary, `rc`, PASSED/FAILED names. Do not paste the whole `runner.log`. |
+| **`idmci-rerun-failed`** | After a failed test phase: `clean-twd` + optional overlay + re-run only FAILED tests |
+| **`jenkins-to-testrun`** | From a Jenkins build URL: pull artifacts, decompress, create `@TESTRUNS/<campaign>/twd/metadata.yaml` |
+| **`artifact-grep`** | Search artifact dumps / twd for resolve, offline, assertion, traceback patterns |
+| **`decompress-logs`** | On manual artifact dumps when `runner.log` or `logs/*` are gzip or unreadable |
 
 ---
 
@@ -163,7 +169,7 @@ Do not start AWS provision until the TGT, `aws-saml.py`, and `get-caller-identit
 
 Use **`clean-twd` only when re-running tests** on already provisioned hosts — not before the first `te --phase test` after `--upto prep`, and not during a continuous full `te metadata.yaml` job. Skip `clean-twd` if `twd` has no prior test artifacts (no stale `runner.log`, junit, or logs from a previous test phase).
 
-When re-running (`te --phase test`, `te --phases prep:test`, or a second test pass after fixing code), run `clean-twd` from `twd` first so old and new results are not mixed. Do not use ad-hoc `rm` when `clean-twd` is available. If tests were overlaid from a local tree, run **`sync-twd-tests`** again after `clean-twd` (clean does not touch campaign siblings, but the overlay must still match the latest local files).
+When re-running (`te --phase test`, `te --phases prep:test`, or a second test pass after fixing code), run `clean-twd` from `twd` first so old and new results are not mixed. Prefer **`idmci-rerun-failed`** when only re-running previously failed pytest cases — it runs `clean-twd`, optional `sync-twd-tests`, writes `metadata.rerun.yaml` with a `-k` filter, and invokes `te --phase test`. Do not use ad-hoc `rm` when `clean-twd` is available. If tests were overlaid from a local tree, run **`sync-twd-tests`** again after `clean-twd` (or pass `--overlay` to `idmci-rerun-failed`).
 
 **Install** (once per environment):
 
@@ -176,6 +182,8 @@ pip install -e ~/git/ai-tools/tools
 ```bash
 cd ~/git/@TESTRUNS/<campaign>/twd
 clean-twd              # remove stale artifacts
+idmci-rerun-failed     # clean + re-run only failed tests
+idmci-rerun-failed --overlay ~/git/sssd-fork-cares_gating
 clean-twd -n           # dry-run: list paths only
 clean-twd -q           # quiet (no stdout unless error)
 ```
@@ -257,7 +265,7 @@ te-test-summary --twd . --json
 
 That prints `rc`, `outcome`, PASSED/FAILED names, and the short summary (`Complete!` block). Do not dump the entire `runner.log` into the user report.
 
-For **Jenkins CI failures**, start from the build URL using [analyze-jenkins-failure](../analyze-jenkins-failure/SKILL.md) to fetch console output, artifact logs, and `metadata.mod.yaml`. Then `te-test-summary --twd <artifact-dir>` when `runner.log` or `*junit.xml` is in that dump.
+For **Jenkins CI failures**, start from the build URL using [analyze-jenkins-failure](../analyze-jenkins-failure/SKILL.md) to fetch console output, artifact logs, and `metadata.mod.yaml`. Run **`decompress-logs`** on the artifact dir when logs are gzip or unreadable. Then `te-test-summary --twd <artifact-dir>` when `runner.log` or `*junit.xml` is in that dump.
 
 | File | Meaning |
 |------|---------|

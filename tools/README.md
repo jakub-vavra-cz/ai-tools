@@ -16,7 +16,10 @@ pip install -e /path/to/ai-tools/tools
 | Command | Description |
 |---------|-------------|
 | `clean-twd` | Remove stale IdM-CI `twd` logs and test artifacts before re-execution |
-| `pull-jenkins-artifacts` | Fetch Jenkins console, extract `RD_JR_ARTIFACTS_URL`, download twd artifacts |
+| `pull-jenkins-artifacts` | Fetch Jenkins console, extract `RD_JR_ARTIFACTS_URL`, download twd artifacts (auto-decompress) |
+| `jenkins-to-testrun` | Pull Jenkins artifacts and scaffold `@TESTRUNS/<campaign>/twd` for local `te` |
+| `artifact-grep` | Search Jenkins / IdM-CI artifact dumps and twd logs (gzip-aware) |
+| `idmci-rerun-failed` | `clean-twd` + optional overlay + re-run only failed pytest tests via `te` |
 | `check-ansible` | yamllint + multi-stack ansible syntax-check / ansible-lint (writing-ansible) |
 | `dump-polarion-testcase` | Fetch a Polarion testcase via REST API and dump it as `key=value` |
 | `import-jira-testcase` | Import a jira-format dump into RHELTEST (match by ID, then summary) |
@@ -29,6 +32,7 @@ pip install -e /path/to/ai-tools/tools
 | `twd-rpm` | Query or install those RPMs on twd inventory hosts (default group: `client`) |
 | `te-test-summary` | Extract the pytest/te short summary from a `twd` for a Jira draft |
 | `run-idm-jenkins` | Upload metadata as an sssd-qe GitLab snippet; print Jenkins trigger params |
+| `decompress-logs` | Decompress gzip IdM-CI / Jenkins log artifacts (incl. misnamed `.gz`) |
 
 ### clean-twd
 
@@ -45,7 +49,10 @@ clean-twd /path/to/twd # explicit twd path
 
 Fetches Jenkins `consoleText`, extracts `RD_JR_ARTIFACTS_URL`, and downloads
 diagnostic twd files (`metadata.mod.yaml`, `runner.log`, junit, etc.) from the
-artifact server. Gzip-compressed uploads are handled automatically.
+artifact server. Gzip-compressed uploads are decompressed on download and a
+**`decompress-logs`** pass runs on the output tree afterward (misnamed `.gz`,
+gzip at plain paths). Use `--no-decompress` to skip the post-pass. For manual
+`curl` dumps, use standalone **`decompress-logs`**.
 
 Requires `JENKINS_USERNAME` and `JENKINS_PASSWORD` (API token) for console
 fetch. Optional: `REQUESTS_CA_BUNDLE` for corp TLS.
@@ -59,8 +66,34 @@ pull-jenkins-artifacts 'https://jenkins…/job/…/123/' -o /tmp/jenkins-123
 pull-jenkins-artifacts 'https://jenkins…/job/…/123/' --url-only
 pull-jenkins-artifacts --artifacts-url 'https://idm-artifacts…/path/' -f metadata.mod.yaml
 pull-jenkins-artifacts 'https://jenkins…/job/…/123/' --console-only
+pull-jenkins-artifacts 'https://jenkins…/job/…/123/' --no-decompress
 pull-jenkins-artifacts 'https://jenkins…/job/…/123/' --json
 ```
+
+### jenkins-to-testrun
+
+Pull Jenkins IdM-CI artifacts (via `pull-jenkins-artifacts`, including automatic
+decompression) and create an `@TESTRUNS` campaign with `twd/metadata.yaml` ready
+for `te`.
+
+```bash
+export JENKINS_USERNAME=<username>
+export JENKINS_PASSWORD=<api-token>
+
+jenkins-to-testrun 'https://jenkins…/job/…/123/'
+jenkins-to-testrun 'https://jenkins…/job/…/123/' --campaign jenkins-c-ares-sssd-tier0-3
+jenkins-to-testrun 'https://jenkins…/job/…/123/' --git-path ~/git --json
+jenkins-to-testrun 'https://jenkins…/job/…/123/' --metadata-only
+jenkins-to-testrun 'https://jenkins…/job/…/123/' --pull-dir /tmp/jenkins-123 --keep-pull-dir
+```
+
+Defaults: `$GIT_PATH` or `~/git` → `~/git/@TESTRUNS/<campaign>/twd/`. Campaign
+name is derived from the Jenkins job path and build number unless `--campaign` is
+set. Copies `metadata.mod.yaml` → `metadata.yaml` plus reference artifacts
+(`runner.log`, junit, `logs/`) unless `--metadata-only`. Prints `te --upto prep`
+and `te --phase test` next steps.
+
+Exit `0` on success, `2` on error.
 
 ### check-ansible
 
@@ -410,6 +443,62 @@ JSON includes `jenkins_job`, `jenkins_parameters` (pass this dict to
 `trigger_build` unless `--trigger` was used), `snippet.raw_url` / `web_url`,
 `idmci_gitrepo` / `idmci_gitbranch`, and `trigger` when the REST fallback ran.
 Exit `0` on success, `2` on error.
+
+### artifact-grep
+
+Search Jenkins / IdM-CI artifact dumps and `twd` logs for regex patterns.
+Reads gzip-compressed files transparently (plain paths and `.gz`).
+
+```bash
+artifact-grep 'Failed to resolve|Going offline' /tmp/jenkins-123
+artifact-grep -i offline ~/git/@TESTRUNS/foo/twd --twd
+artifact-grep -C 2 AssertionError /tmp/jenkins-123/logs
+artifact-grep -F 'Domain name not found' /tmp/jenkins-123 --include '*.log'
+artifact-grep 'SSSD is offline' /tmp/jenkins-123 --json
+artifact-grep pattern /tmp/jenkins-123 -l
+```
+
+Exit `0` when matches are found, `1` when none, `2` on error.
+
+### idmci-rerun-failed
+
+Clean stale twd artifacts, optionally overlay local tests, and re-run only the
+pytest cases that failed or errored in the last run.
+
+```bash
+cd ~/git/@TESTRUNS/<campaign>/twd
+idmci-rerun-failed
+idmci-rerun-failed --overlay ~/git/sssd-fork-cares_gating
+idmci-rerun-failed --prepare-only
+idmci-rerun-failed -n --json
+idmci-rerun-failed --pytest-args '-k test_0012_ad_parameters_server_unresolvable'
+```
+
+Workflow:
+
+1. Read failed nodeids from `runner.log` or `*junit.xml` (via `te-test-summary` logic)
+2. `clean-twd`
+3. Optional `sync-twd-tests` when `--overlay` is set
+4. Write `metadata.rerun.yaml` with appended `-k` filter (preserves existing `args:`)
+5. Run `te --phase test metadata.rerun.yaml` unless `--prepare-only` / `--dry-run`
+
+Exit `0` when `te` passes, non-zero `te` rc on test failure, `2` on setup errors.
+
+### decompress-logs
+
+Decompress gzip log artifacts from IdM-CI / Jenkins dumps. Handles real gzip
+payloads and misnamed `.gz` files that `pull-jenkins-artifacts` already wrote as
+plain text.
+
+```bash
+decompress-logs /tmp/jenkins-123/logs
+decompress-logs /tmp/jenkins-123/logs --json
+decompress-logs /tmp/jenkins-123/logs -n
+decompress-logs /tmp/jenkins-123/logs --remove-source
+```
+
+Writes plain files next to the sources (`.log.gz` → `.log`). Use `--force` to
+replace existing outputs. Exit `0` on success, `2` on error.
 
 ## Tests
 

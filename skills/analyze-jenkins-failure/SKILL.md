@@ -3,8 +3,8 @@ name: analyze-jenkins-failure
 description: >-
   Analyzes failed IdM-CI / SSSD Jenkins jobs from a job URL: fetches Jenkins
   console output, extracts RD_JR_ARTIFACTS_URL, downloads diagnostic logs and
-  metadata.mod.yaml from the artifact server, diagnoses the failure, and outlines
-  local reproduction via @TESTRUNS and `te`. Use when the user pastes a Jenkins
+  metadata.mod.yaml from the artifact server, decompresses gzip log artifacts with
+  `decompress-logs`, diagnoses the failure, and outlines local reproduction via @TESTRUNS and `te`. Use when the user pastes a Jenkins
   build link, asks why a CI job failed, or wants to reproduce an IdM-CI test run.
 ---
 
@@ -16,7 +16,7 @@ User provides a **Jenkins job/build URL** (or asks to debug a failed IdM-CI / SS
 
 Related skills:
 
-- [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md) — run `te`, overlay local tests (`sync-twd-tests`), `te-test-summary`, `clean-twd`
+- [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md) — run `te`, overlay local tests (`sync-twd-tests`), `te-test-summary`, `clean-twd`, `idmci-rerun-failed`, `decompress-logs`
 - [run-idm-jenkins](../run-idm-jenkins/SKILL.md) — trigger `User-Tools/trigger-test-suite-tool` from metadata (snippet `IDMCI_METADATA_URL`)
 - [create-idmci-metadata](../create-idmci-metadata/SKILL.md) — edit metadata when reproduction needs tweaks
 
@@ -54,14 +54,22 @@ Optional: use MCP **`user-jenkins`** / **`get_build_status`** with `job_name` = 
 
 ## 2. Fetch Jenkins console output
 
-Prefer the **`pull-jenkins-artifacts`** CLI from [ai-tools/tools](../../tools/README.md) (install: `pip install -e ~/git/ai-tools/tools`):
+Prefer **`jenkins-to-testrun`**, **`pull-jenkins-artifacts`**, **`artifact-grep`**, and **`decompress-logs`** from [ai-tools/tools](../../tools/README.md) (install: `pip install -e ~/git/ai-tools/tools`):
 
 ```bash
 export JENKINS_USERNAME=… JENKINS_PASSWORD=…   # API token
 export REQUESTS_CA_BUNDLE=~/git/certs/combined-certifi.pem  # when needed
 
+# One-shot @TESTRUNS scaffold (pull + decompress + metadata.yaml):
+jenkins-to-testrun 'https://jenkins…/job/…/123/'
+
 pull-jenkins-artifacts 'https://jenkins…/job/…/123/' -o /tmp/jenkins-123
 pull-jenkins-artifacts 'https://jenkins…/job/…/123/' --url-only
+
+# Standalone when you already have a dump (manual curl, partial tree):
+decompress-logs /tmp/jenkins-123 --json
+artifact-grep 'Failed to resolve|Going offline|offline' /tmp/jenkins-123
+artifact-grep -C 2 AssertionError /tmp/jenkins-123/logs --json
 ```
 
 Without install: `python -m ai_tools.jenkins_artifacts …`
@@ -122,28 +130,35 @@ If neither pattern appears, the job may have failed before `rdJob`, or `IDMCI_SK
 
 ## 4. Download artifacts from the artifact server
 
-`pull-jenkins-artifacts` downloads the default file set into `-o` (preserving paths like `config/metadata.yaml`). Override with repeated `-f PATH`, or pass `--artifacts-url` when you already have the base URL.
+`pull-jenkins-artifacts` downloads the default file set into `-o` (preserving paths like `config/metadata.yaml`), **decompresses gzip on download**, and runs a shared **`decompress-logs`** pass on the output tree. Override with repeated `-f PATH`, or pass `--artifacts-url` when you already have the base URL. Use `--no-decompress` to skip the post-pass.
 
 Manual download when you only need a few files:
 
-Artifact files live under `{RD_JR_ARTIFACTS_URL}{relative_path}`. Upload uses `idm-artifacts upload --compress` — **most text files are gzip-encoded on the server** at the plain path (no `.gz` suffix); `metadata.mod.yaml` and `metadata.orig.yaml` are exceptions on some runs. Try plain URL first, then `.gz` suffix; decompress when payload has gzip magic.
+Artifact files live under `{RD_JR_ARTIFACTS_URL}{relative_path}`. Upload uses `idm-artifacts upload --compress` — **most text files are gzip-encoded on the server** at the plain path (no `.gz` suffix); `metadata.mod.yaml` and `metadata.orig.yaml` are exceptions on some runs.
 
-### Download helper
+### Decompress logs (`decompress-logs`)
 
-Try gzipped first, then plain (same logic as `IdMUtils.downloadArtifact`):
+After **manual `curl` downloads**, or when `runner.log` / `logs/*` look binary or `grep` finds nothing, run **`decompress-logs`** on the artifact directory. It handles:
+
+- gzip payloads saved at plain paths (no `.gz` suffix)
+- real `.log.gz` files
+- misnamed `.gz` files that are already plain text
+
+Do **not** use ad-hoc `gunzip` loops — use `decompress-logs` instead.
 
 ```bash
 ARTIFACTS_URL='https://idm-artifacts.psi.redhat.com/…/123/'
 
-fetch_artifact() {
-  local relpath="$1" dest="$2"
-  if curl -sf "${ARTIFACTS_URL}${relpath}.gz" -o "${dest}.gz" \
-     && gunzip -f "${dest}.gz"; then
-    return 0
-  fi
-  curl -sf "${ARTIFACTS_URL}${relpath}" -o "$dest"
-}
+curl -sf "${ARTIFACTS_URL}runner.log" -o /tmp/jenkins-artifacts-123/runner.log \
+  || curl -sf "${ARTIFACTS_URL}runner.log.gz" -o /tmp/jenkins-artifacts-123/runner.log
+curl -sf "${ARTIFACTS_URL}logs/" -o /tmp/jenkins-artifacts-123/logs/example.log \
+  || true   # fetch individual files; no directory listing on S3
+
+decompress-logs /tmp/jenkins-artifacts-123 --json
+decompress-logs /tmp/jenkins-artifacts-123/logs --remove-source   # optional cleanup
 ```
+
+`pull-jenkins-artifacts` already decompresses on fetch and runs `decompress-logs` on the tree; use standalone **`decompress-logs`** for manual `curl` dumps or partial trees only.
 
 ### Priority files
 
@@ -180,10 +195,11 @@ If individual downloads 404, fetch `artifacts.html` when available — it links 
 Work **narrowest signal first**:
 
 1. **`te-test-summary --twd <artifact-dir> --json`** — `rc`, FAILED names, short summary (falls back to junit)
-2. **junit** — failure messages and stack traces
-3. **`runner.log`** — which `te` phase/step failed when the summary is missing (prep/provision)
-4. **`mrack.log`** — OpenStack/Beaker/AWS provision errors
-5. **Console** — Jenkins infra (timeout, agent, credentials) when artifacts are empty
+2. **`artifact-grep`** — quick scan for resolve/offline/assertion strings across `runner.log`, `logs/*`, junit
+3. **junit** — failure messages and stack traces
+4. **`runner.log`** — which `te` phase/step failed when the summary is missing (prep/provision)
+5. **`mrack.log`** — OpenStack/Beaker/AWS provision errors
+6. **Console** — Jenkins infra (timeout, agent, credentials) when artifacts are empty
 
 ### Classify
 
@@ -208,7 +224,19 @@ Report:
 
 Use [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md).
 
-### Set up campaign
+### Set up campaign (preferred)
+
+```bash
+jenkins-to-testrun 'https://jenkins…/job/…/123/' --campaign jenkins-tier1-123
+# or let it derive the campaign name from the job URL
+jenkins-to-testrun 'https://jenkins…/job/…/123/' --json
+```
+
+This runs `pull-jenkins-artifacts` (with automatic decompression), copies
+`metadata.mod.yaml` → `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml`, and
+optionally reference logs for `te-test-summary`.
+
+### Set up campaign (manual)
 
 ```bash
 CAMPAIGN="jenkins-<job-slug>-<build>"   # e.g. jenkins-tier1-123
@@ -235,6 +263,8 @@ te-test-summary --twd . --json
 clean-twd
 sync-twd-tests <local-test-dir> --twd . --json   # when overlaying WIP
 te --phase test metadata.yaml
+# or:
+idmci-rerun-failed --overlay <local-test-dir>
 ```
 
 **Do not teardown automatically** when the test phase has failures or errors (`te-test-summary` `rc` ≠ 0 / `outcome: failed`, or a non-zero `te --phase test` exit). Leave the provisioned hosts up so the next iteration can re-run with `clean-twd` (+ `sync-twd-tests` if overlaying) + `te --phase test` without provisioning again.
@@ -266,7 +296,7 @@ State blockers explicitly.
 
 1. Parse build URL → fetch **consoleText**
 2. Extract **`RD_JR_ARTIFACTS_URL`**
-3. Download **junit**, **runner.log**, **metadata.mod.yaml** (+ phase-specific logs)
+3. Download **junit**, **runner.log**, **metadata.mod.yaml** (+ phase-specific logs); **`decompress-logs`** when manual fetch or logs are unreadable
 4. **Diagnose** — `te-test-summary --twd <artifact-dir>`, then phase/tests/classification
 5. **Reproduce** — `@TESTRUNS` + `te` when metadata is available and user wants a re-run; **`sync-twd-tests`** if overlaying local WIP
 6. **Keep hosts** on test failure/error — skip teardown; only teardown after pass or explicit user request

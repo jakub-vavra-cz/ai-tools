@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import gzip
 import json
 import os
 import re
@@ -17,7 +16,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-GZIP_MAGIC = b"\x1f\x8b"
+from ai_tools.compression import write_artifact_bytes
+from ai_tools.decompress_logs import DecompressSummary, decompress_logs
 
 RD_JR_ARTIFACTS_URL_RE = re.compile(
     r"RD_JR_ARTIFACTS_URL=(https?://\S+)",
@@ -58,12 +58,15 @@ class PullResult:
     console_path: Path | None = None
     downloaded: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
+    decompress: DecompressSummary | None = None
 
     def to_dict(self) -> dict:
         data = asdict(self)
         data["output_dir"] = str(self.output_dir)
         if self.console_path is not None:
             data["console_path"] = str(self.console_path)
+        if self.decompress is not None:
+            data["decompress"] = self.decompress.to_dict()
         return data
 
 
@@ -173,10 +176,25 @@ def _looks_like_html(data: bytes) -> bool:
 
 
 def _write_payload(data: bytes, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if data[:2] == GZIP_MAGIC:
-        data = gzip.decompress(data)
-    dest.write_bytes(data)
+    write_artifact_bytes(data, dest)
+
+
+def decompress_artifact_tree(
+    root: Path,
+    *,
+    dry_run: bool = False,
+    force: bool = False,
+    remove_source: bool = False,
+) -> DecompressSummary:
+    """Post-process a pull output tree (gzip at plain paths, .gz, misnamed .gz)."""
+    return decompress_logs(
+        [root],
+        recursive=True,
+        dry_run=dry_run,
+        force=force,
+        remove_source=remove_source,
+        only_gz=True,
+    )
 
 
 def download_artifact(
@@ -217,6 +235,7 @@ def pull_jenkins_artifacts(
     artifact_paths: list[str] | None = None,
     get_console: bool = True,
     download_artifacts: bool = True,
+    decompress_after: bool = True,
     auth: tuple[str, str] | None = None,
     ca_bundle: str | None = None,
 ) -> PullResult:
@@ -263,6 +282,9 @@ def pull_jenkins_artifacts(
             else:
                 result.missing.append(relpath)
 
+    if decompress_after and out.is_dir():
+        result.decompress = decompress_artifact_tree(out)
+
     return result
 
 
@@ -306,6 +328,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="files",
         metavar="PATH",
         help="Artifact relative path to download (repeatable; overrides defaults)",
+    )
+    parser.add_argument(
+        "--no-decompress",
+        action="store_true",
+        help="Skip post-download decompress-logs pass on the output tree",
     )
     parser.add_argument(
         "--json",
@@ -362,6 +389,7 @@ def main(argv: list[str] | None = None) -> int:
             artifact_paths=args.files,
             get_console=bool(args.build_url),
             download_artifacts=not args.console_only,
+            decompress_after=not args.no_decompress and not args.console_only,
             auth=auth,
             ca_bundle=ca_bundle,
         )
@@ -380,6 +408,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"downloaded: {path}")
         for path in result.missing:
             print(f"missing: {path}")
+        if result.decompress is not None:
+            stats = result.decompress.to_dict()
+            print(
+                "decompress:"
+                f" {stats['decompressed']} decompressed,"
+                f" {stats['renamed']} renamed,"
+                f" {stats['skipped']} skipped",
+            )
 
     if args.build_url and not args.console_only and not result.artifacts_url:
         print("error: RD_JR_ARTIFACTS_URL not found in console", file=sys.stderr)

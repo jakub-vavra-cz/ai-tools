@@ -58,7 +58,11 @@ pip install -e /path/to/ai-tools/tools
 | Command | Purpose |
 |---------|---------|
 | `clean-twd` | Clean IdM-CI `twd` artifacts before test re-execution |
-| `pull-jenkins-artifacts` | Fetch Jenkins console + IdM-CI twd artifacts from the artifact server |
+| `pull-jenkins-artifacts` | Fetch Jenkins console + IdM-CI twd artifacts (auto-decompress) |
+| `jenkins-to-testrun` | Pull artifacts and scaffold `@TESTRUNS/<campaign>/twd` for local `te` |
+| `artifact-grep` | Search Jenkins / IdM-CI artifact dumps and twd logs (gzip-aware) |
+| `idmci-rerun-failed` | Re-run only failed pytest tests in an existing `@TESTRUNS` twd |
+| `decompress-logs` | Decompress gzip IdM-CI / Jenkins log artifacts (plain paths, `.gz`, misnamed `.gz`) |
 | `check-ansible` | yamllint + dual-stack ansible syntax-check / ansible-lint |
 | `dump-polarion-testcase` / `import-jira-testcase` / `scan-python-testcase` / `beetlejuice` | Polarion ↔ Jira RHELTEST Test Case helpers |
 | `is-merged` | Check whether a local tip is already on upstream |
@@ -72,7 +76,7 @@ See [tools/README.md](tools/README.md).
 |-------|---------|
 | `about-idmci` | Answer IdM-CI conceptual/how-to questions from docs-idmci (`~/git/idmcidoc-fork-main`, [docs-idmci](https://gitlab.cee.redhat.com/identity-management/docs-idmci)); topic map in `skills/about-idmci/reference.md` |
 | `agenda` | Daily work agenda from worklog, git-stats, and jira-cli MCP tools |
-| `analyze-jenkins-failure` | Debug IdM-CI Jenkins jobs from a build URL (console → `RD_JR_ARTIFACTS_URL` → logs + `metadata.mod.yaml` → reproduction) |
+| `analyze-jenkins-failure` | Debug IdM-CI Jenkins jobs (`jenkins-to-testrun`, `pull-jenkins-artifacts`, `decompress-logs`, reproduction) |
 | `backlog` | Backlog tickets for estimation and sprint planning via jira-cli MCP |
 | `is-merged` | Whether a local branch/worktree tip is already on upstream (`is-merged` CLI) |
 | `jira-cli-mcp` | Jira issue search, updates, and transitions via the jira-cli MCP (IDM/RHEL transition map in `skills/jira-cli-mcp/reference.md`) |
