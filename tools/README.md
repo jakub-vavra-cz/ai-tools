@@ -21,12 +21,16 @@ pip install -e /path/to/ai-tools/tools
 | `artifact-grep` | Search Jenkins / IdM-CI artifact dumps and twd logs (gzip-aware) |
 | `idmci-rerun-failed` | `clean-twd` + optional overlay + re-run only failed pytest tests via `te` |
 | `check-ansible` | yamllint + multi-stack ansible syntax-check / ansible-lint (writing-ansible) |
+| `check-python` | Read-only Python lint/format checks (ruff, flake8, black, isort) |
 | `dump-polarion-testcase` | Fetch a Polarion testcase via REST API and dump it as `key=value` |
 | `import-jira-testcase` | Import a jira-format dump into RHELTEST (match by ID, then summary) |
 | `scan-python-testcase` | Scan local Python tests (Betelgeuse-style) into jira-format dumps |
 | `beetlejuice` | Import Betelgeuse Polarion XML to Jira (`test-case`; `test-run` planned) |
 | `is-merged` | Check whether a local tip is already on upstream (ancestor / cherry / patch-id) |
 | `clone-review` | Clone a GitHub PR / GitLab MR under `~/git/@REVIEWS` and list changed files |
+| `review-diff` | Print PR/MR patch, diffstat, or changed-file list (gh/glab or local clone) |
+| `cleanup-review` | Remove clone-review checkouts under `~/git/@REVIEWS` after a review |
+| `review-pr` | Orchestrate clone + diff metadata + lint changed files (+ optional cleanup) |
 | `sync-twd-tests` | Overlay local test WIP onto an IdM-CI campaign sibling of `twd` |
 | `brew-fetch-nvr` | Download brewroot binary RPMs for a Fixed in Build NVR into `twd/brew-rpms/` |
 | `twd-rpm` | Query or install those RPMs on twd inventory hosts (default group: `client`) |
@@ -121,6 +125,39 @@ check-ansible path.yml --extra-ansible-version 8.7.0 --extra-python 3.12
 
 Exit `0` when all non-skipped checks pass; `1` on lint/syntax/deprecation
 failure; `2` on bad arguments / missing paths.
+
+### check-python
+
+Runs read-only Python checks on one or more `.py` files, discovering project
+tooling from `pyproject.toml`, `.flake8`, `.pre-commit-config.yaml`, and CI
+workflows. Mirrors the
+[run-python-static-code-analysis](../skills/run-python-static-code-analysis/SKILL.md)
+skill:
+
+1. **Ruff projects** — `ruff check` + `ruff format --check`
+2. **flake8 / black / isort projects** — `flake8`, plus `black --check` and
+   `isort --check-only` when configured
+3. **Unconfigured trees** — ruff fallback (`ruff check` + `ruff format --check`)
+
+```bash
+check-python path/to/changed.py
+check-python src/pkg/mod.py tests/test_mod.py --root ~/git/@REVIEWS/repo-pr42
+check-python file.py --json
+check-python file.py --force-flake8 -q
+check-python file.py --skip-ruff --skip-black
+```
+
+| Flag | Purpose |
+|------|---------|
+| `paths` | One or more `.py` files |
+| `--root` | Override project root for config discovery |
+| `--skip-ruff` / `--skip-flake8` / `--skip-black` / `--skip-isort` | Skip tools |
+| `--force-ruff` / `--force-flake8` | Override discovery |
+| `--json` | Machine-readable report |
+| `-q` | Omit command output from text report |
+
+Exit `0` when all non-skipped checks pass; `1` on lint failure; `2` on bad
+arguments / missing paths.
 
 ### dump-polarion-testcase
 
@@ -320,6 +357,95 @@ clone-review URL --root ~/git/@REVIEWS --no-refresh
 | `-q` | Omit file list / diffstat from text output |
 
 Exit `0` on success, `2` on error.
+
+### review-diff
+
+Print the patch for a GitHub PR or GitLab MR. Uses an existing
+``clone-review`` checkout when present; otherwise fetches via ``gh pr diff`` /
+``glab mr diff``. Used by the
+[review-changes](../skills/review-changes/SKILL.md) skill.
+
+```bash
+review-diff https://github.com/SSSD/sssd-ci-containers/pull/189
+review-diff SSSD/sssd#1842 --name-only
+review-diff URL --stat --json
+review-diff URL --api-only
+review-diff URL --clone-path ~/git/@REVIEWS/sssd-ci-containers-pr189
+review-diff URL -o /tmp/pr189.patch
+```
+
+| Flag | Purpose |
+|------|---------|
+| `reference` | PR/MR URL, or `owner/repo#N` / `group/proj!N` |
+| `--root` / `--name` | Locate an existing clone-review tree |
+| `--clone-path` | Use a specific checkout (must contain `reviews`) |
+| `--api-only` | Skip local clone even when present |
+| `--name-only` | Changed file paths only |
+| `--stat` | Diffstat summary only |
+| `-o` / `--output` | Write patch to a file |
+| `--json` | Machine-readable metadata (+ diff unless `--name-only`/`--stat`) |
+
+Exit `0` on success, `2` on error.
+
+### cleanup-review
+
+Remove ``clone-review`` checkouts after a review. Only deletes paths under a
+directory containing ``reviews``.
+
+```bash
+cleanup-review https://github.com/SSSD/sssd-ci-containers/pull/189
+cleanup-review --name sssd-ci-containers-pr189
+cleanup-review --all
+cleanup-review URL -n --json
+```
+
+| Flag | Purpose |
+|------|---------|
+| `reference` | PR/MR URL or shorthand (optional with other selectors) |
+| `--root` | Reviews parent directory |
+| `--name` | Clone directory name under `--root` |
+| `--clone-path` | Remove a specific checkout |
+| `--all` | Remove every git clone under the reviews root |
+| `-n` / `--dry-run` | Show what would be removed |
+| `--json` | Machine-readable result |
+
+Exit `0` on success, `2` on error.
+
+### review-pr
+
+Orchestrates the [review-changes](../skills/review-changes/SKILL.md) mechanical
+workflow:
+
+1. ``clone-review`` — checkout under ``~/git/@REVIEWS``
+2. Lint changed ``*.py`` with ``check-python`` and Ansible ``*.yml``/``*.yaml``
+   with ``check-ansible``
+3. Optional ``cleanup-review`` when ``--cleanup`` is set
+
+Code-quality / docstring review is still for the agent after linter output.
+
+```bash
+review-pr https://github.com/SSSD/sssd-ci-containers/pull/189
+review-pr SSSD/sssd#1842 --json -q
+review-pr URL --skip-lint
+review-pr URL --include-diff -o /tmp/pr189.txt   # use review-diff for patch-only
+review-pr URL --cleanup
+review-pr URL --no-refresh
+```
+
+| Flag | Purpose |
+|------|---------|
+| `reference` | PR/MR URL or shorthand |
+| `--root` / `--name` / `--platform` / `--host` | Passed to clone-review |
+| `--no-refresh` | Reuse clone; recompute diff and lint only |
+| `--skip-lint` | Clone and list changes only |
+| `--include-diff` | Include full patch in output |
+| `--cleanup` | Remove review clone after the run |
+| `--cleanup-dry-run` | Show cleanup without deleting |
+| `--json` | Machine-readable report |
+| `-q` | Omit linter output bodies from text report |
+
+Exit `0` when linters pass (or ``--skip-lint``); `1` on lint failure; `2` on
+error.
 
 ### sync-twd-tests
 

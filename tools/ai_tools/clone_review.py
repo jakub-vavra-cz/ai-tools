@@ -123,6 +123,17 @@ def default_reviews_root() -> Path:
     return (Path.home() / "git" / "@REVIEWS").resolve()
 
 
+def expected_clone_path(
+    ref: ParsedRef,
+    *,
+    reviews_root: Path | None = None,
+    dirname: str | None = None,
+) -> Path:
+    """Return the default ``clone-review`` destination for *ref*."""
+    root = assert_reviews_path(reviews_root or default_reviews_root())
+    return root / (dirname or ref.default_dirname())
+
+
 def assert_reviews_path(path: Path) -> Path:
     """Require *path* (resolved) to contain the literal substring ``reviews``."""
     resolved = path.expanduser().resolve()

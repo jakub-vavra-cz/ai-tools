@@ -6,6 +6,18 @@ description: >-
 
 # Python edits: lint and format (ruff, flake8, isort, Black)
 
+Prefer the packaged runner from `ai-tools/tools` when checking files read-only
+(e.g. PR review) — it encodes discovery and check-only gates:
+
+```bash
+pip install -e /path/to/ai-tools/tools   # once
+check-python path/to/changed.py
+check-python path/to/changed.py --root ~/git/@REVIEWS/repo-pr42 --json
+```
+
+See `tools/README.md` for flags (`--skip-ruff`, `--force-flake8`, `--json`).
+For **editing** Python (format fixes allowed), follow the manual steps below.
+
 ## Before running any lint or format tool
 
 Do **not** assume default CLI flags until you have checked the repo. Discover how this project expects linting to run, then invoke tools so they pick up that configuration.

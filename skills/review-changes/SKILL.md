@@ -5,9 +5,12 @@ description: >-
   ~/git/@REVIEWS/ (path must include the literal substring reviews), computes the
   changed file set against the default branch, runs project-appropriate linters in
   read-only mode, then evaluates the diff for unclear docstrings and general code
-  quality. Use when reviewing pull requests or merge requests, when the user
-  mentions review-changes, gh, glab, clone-review, or wants lint plus a concise
-  quality pass on remote branch changes without an existing checkout.
+  quality. Prefer `review-pr` for the full mechanical workflow, or
+  `clone-review` / `review-diff` / `check-python` / `check-ansible` /
+  `cleanup-review` individually. Use when reviewing pull requests or merge
+  requests, when the user mentions review-changes, gh, glab, review-pr,
+  clone-review, review-diff, check-python, cleanup-review, or wants lint plus a
+  concise quality pass on remote branch changes without an existing checkout.
 ---
 
 # Review-changes (PR/MR clone and linters)
@@ -22,12 +25,22 @@ If you **edit** Python in a workspace after review, use the project skill [run-p
 
 ## 1. Clone with `clone-review` (preferred)
 
+**One-shot:** `review-pr` runs clone + lint in a single command (see below).
+For step-by-step control, use the individual tools.
+
 Prefer the approved CLI from [ai-tools/tools](../../tools/README.md) over ad-hoc
 `gh` / `glab` / `git` sequences. Install once:
 
 ```bash
 pip install -e ~/git/ai-tools/tools
 ```
+
+```bash
+review-pr https://github.com/OWNER/REPO/pull/N --json -q
+review-pr https://github.com/OWNER/REPO/pull/N --cleanup
+```
+
+Or step by step:
 
 ```bash
 clone-review https://github.com/OWNER/REPO/pull/N --json
@@ -57,6 +70,21 @@ From the JSON (or text) report, take:
 | `changed_files` | Lint scope |
 | `diff_stat` | Short summary for the review report |
 
+**Diff:** use `review-diff` for the patch without re-running `git diff` manually:
+
+```bash
+review-diff REFERENCE
+review-diff REFERENCE --name-only
+review-diff REFERENCE --stat --json
+```
+
+**Cleanup:** when the review is done:
+
+```bash
+cleanup-review REFERENCE
+cleanup-review --all
+```
+
 **Safety:** `clone-review` refuses destinations whose resolved path does not
 contain `reviews`, and will not overwrite an unrelated existing clone.
 
@@ -82,7 +110,7 @@ Run tools **from the clone root** (`clone_path`) so repo configs apply (`setup.c
 
 | Changed files | Action |
 |---------------|--------|
-| `*.py` | `flake8` on those paths (omit `--max-line-length` if project config sets it). Run `black --check` on the same set **if** the project uses Black (config in `pyproject.toml` / `.pre-commit-config.yaml` / CI). Run `ruff check` without `--fix` if `ruff` is configured. |
+| `*.py` | `check-python` on those paths (discovers ruff / flake8 / black / isort from project config). Manual fallback: `flake8`, `black --check`, `ruff check` per [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md). |
 | Ansible `*.yml` / `*.yaml` | Prefer [writing-ansible](../writing-ansible/SKILL.md) / `check-ansible` (system + uvx pins). |
 | `*.toml` / `*.cfg` / `*.ini` | Only run Python tools if they are clearly the lint config; otherwise skip. |
 | JS/TS | If `package.json` has `lint` or `eslint`, run `npm ci` or `pnpm install` only when needed, then the documented lint script on changed files or the package scope the project uses. |
@@ -119,3 +147,5 @@ Classify findings (e.g. must-fix / should-fix / nit) and tie each to a file or h
 ## 4. Report
 
 Summarize: `clone_path`, `base_ref` / SHAs, changed files, **linter** pass/fail and commands, then **quality/docstring** findings from section 3 (or state none worth noting).
+
+**Cleanup:** run `cleanup-review REFERENCE` (or `cleanup-review --all`) when finished.
