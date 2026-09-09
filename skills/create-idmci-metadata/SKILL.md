@@ -3,15 +3,20 @@ name: create-idmci-metadata
 description: >-
   Authors IdM-CI job metadata YAML (domains, phases, config, TOKEN_ placeholders)
   and wires test-plan jobs. Uses patterns from sssd-qe, sudo, and idm-ci metadata
-  trees plus idmcidoc specs. Use when creating or editing metadata.yaml, test-plan
-  jobs, pytest-mh/pytests/restraint topologies, or IDMCI_REPLACE_TOKEN options.
+  trees plus idmcidoc specs.   For local @TESTRUNS, point pytest-mh:/pytests: and container playbooks at
+  ~/git/<worktree>/... so te runs tests from the worktree (no sync-twd-tests);
+  Jenkins/committed metadata keeps ../sssd/... init-clone paths. Use when
+  creating or editing metadata.yaml, test-plan jobs, pytest-mh/pytests/restraint
+  topologies, or IDMCI_REPLACE_TOKEN options.
 ---
 
 # Create IdM-CI metadata
 
 ## When this applies
 
-User needs a **new or updated job metadata file** (`metadata/**/*.yaml`) or a **test-plan job** entry pointing at it. For **running** metadata locally, use [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md) (`sync-twd-tests` after init clone if the user has local WIP; `te-test-summary` after the test phase). For **running** metadata on Jenkins (`trigger-test-suite-tool`, snippet `IDMCI_METADATA_URL`), use [run-idm-jenkins](../run-idm-jenkins/SKILL.md). For **writing SSSD system tests**, use [write-sssd-system-tests](../write-sssd-system-tests/SKILL.md).
+User needs a **new or updated job metadata file** (`metadata/**/*.yaml`) or a **test-plan job** entry pointing at it. For **`te` invocation** (phase flags, twd), use [run-te](../run-te/SKILL.md). For **running** metadata locally (@TESTRUNS campaigns), use [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md). For **running** metadata on Jenkins (`trigger-test-suite-tool`, snippet `IDMCI_METADATA_URL`), use [run-idm-jenkins](../run-idm-jenkins/SKILL.md). For **writing SSSD system tests**, use [write-sssd-system-tests](../write-sssd-system-tests/SKILL.md).
+
+**Local vs Jenkins test paths:** For LTE / `@TESTRUNS`, set `pytest-mh:` or `pytests:` (and optional `git:`) to `~/git/<worktree>/...` so `te` runs tests directly from the developer worktree — init may still clone `../sssd` but that clone is ignored for the test phase; no `sync-twd-tests`. **Do not** use worktree paths in committed `sssd-qe` / `sudo` metadata or Jenkins jobs — CI relies on init clones (`../sssd/...`, `git: ../sssd`).
 
 **Authoritative docs** (read before inventing structure):
 
@@ -120,15 +125,56 @@ When using pytest-mh (SSSD/sudo system tests):
 2. Per host: `hostname`, `group`, `groups: [...]`, `role`, `os`, and `pytest_mh.conn` (and `config` / `artifacts` where needed).
 3. **Init**: `init/testrunner-dir.yaml` + `init/sssd-upstream-pytest.yaml` with `repo` / `branch` (and `repo_loc` if not default).
 4. **Provision**: `provision/mrack-up.yaml`, `provision/wait.yaml`.
-5. **Prep** (typical): `redhat-base`, `repos`, `set-root-ssh-password`, `prefer-ipv4`, `win-domain-setup`, `win-get-ad-cert`, `sssd-dns`, then `../sssd-ci-containers/src/ansible/playbook_vm.yml` with suite-specific `extra_vars`.
+5. **Prep** (typical): `redhat-base`, `repos`, `set-root-ssh-password`, `prefer-ipv4`, `win-domain-setup`, `win-get-ad-cert`, `sssd-dns`, then a **sssd-ci-containers** playbook with suite-specific `extra_vars`.
 6. **Test**:
 
 ```yaml
   - name: test
     steps:
-      - pytest-mh: ../sssd/src/tests/system/   # or ../sudo-tests/pytest/
+      - pytest-mh: ../sssd/src/tests/system/   # CI / Jenkins: init clone under twd
         args: "TOKEN_SUITE"
         name: "TOKEN_NAME"
+```
+
+### Local @TESTRUNS: run tests from `~/git/<worktree>` (skip sync)
+
+For ad-hoc LTE under `~/git/@TESTRUNS/<campaign>/twd`, point the **test phase** at the developer's **git worktree** under `~/git/<worktree>` instead of the init clones (`../sssd`, `../sudo-tests`, …). `te` executes `pytest-mh:` / `pytests:` from that path directly — edit the worktree and re-run `te --phase test`; no `sync-twd-tests` overlay.
+
+Init may still check out `../sssd` (or other repos) in the campaign workspace; **ignore those clones for the test phase** when metadata points at the worktree. Prep/container playbooks can use the same pattern.
+
+| Step | Jenkins / committed metadata | Local @TESTRUNS only |
+|------|------------------------------|---------------------|
+| `pytest-mh:` | `../sssd/src/tests/system/` or `../sudo-tests/pytest/` | `~/git/sssd-fork-<topic>/src/tests/system/` |
+| `pytests:` + `git:` | `pytests: TOKEN_TEST_PATH`, `git: ../sssd` | `pytests: ~/git/sssd-fork-<topic>/src/tests/...` — omit `git:` or point `git:` at the same worktree if the step needs it |
+| sssd-ci-containers prep | `../sssd-ci-containers/src/ansible/playbook_vm.yml` | `~/git/cont-fork-<topic>/src/ansible/playbook_vm.yml` or `../../../cont-fork-<topic>/src/ansible/playbook_vm.yml` |
+
+`~/git/...` and `../../../<worktree>/...` (three levels up from `twd` to `~/git`) both resolve from `twd`. Prefer `~/git/<worktree>` when the name is known.
+
+**Jenkins / CI:** Keep `../sssd/...`, `git: ../sssd`, and init-clone paths in **committed** `sssd-qe` / `sudo` metadata and test-plan jobs. The modifier and Jenkins controller have no access to your `~/git/<worktree>`; CI runs the pushed branch from init clones only.
+
+Example (local AD forest campaign):
+
+```yaml
+- name: prep2
+  steps:
+  - playbook: ~/git/cont-fork-adforest/src/ansible/playbook_vm.yml
+    extra_vars:
+      skip_schema: true
+- name: test
+  steps:
+  - pytest-mh: ~/git/sssd-fork-adforest/src/tests/system/
+    args: -k test_adforest --mh-topology=ad-forest
+    name: adforest
+```
+
+Example (local upstream `pytests:` — worktree path, no sync):
+
+```yaml
+- name: test
+  steps:
+  - pytests: ~/git/sssd-fork-myfix/src/tests/integration/test_example.py
+    args: -v
+    ssh_transport: openssh
 ```
 
 7. **Collect / teardown**: `collect/sssd-logs.yaml`, `collect/win-logs.yaml`, `teardown/fetch-logs.yaml`, `teardown/check-rpm-version.yaml`, `teardown/mrack-destroy.yaml`.
@@ -158,7 +204,9 @@ Windows AD hosts: `host_type: 'windows'`, `group: ad_root` (or `ad_subdomain` / 
 
 ## pytests (upstream) metadata checklist
 
-Simpler topology — IPA install playbooks in prep, no `config.outputs`:
+Simpler topology — IPA install playbooks in prep, no `config.outputs`.
+
+**Jenkins / committed metadata** — test path relative to init clone; `git:` required:
 
 ```yaml
   - name: test
@@ -169,7 +217,17 @@ Simpler topology — IPA install playbooks in prep, no `config.outputs`:
         ssh_transport: openssh
 ```
 
-See `sssd-qe-fork/metadata/pytest/pytest-client-ipa-ad.yaml`.
+**Local @TESTRUNS only** — point `pytests:` at `~/git/<worktree>/...`; init's `../sssd` clone is unused for the test phase (no `sync-twd-tests`):
+
+```yaml
+  - name: test
+    steps:
+      - pytests: ~/git/sssd-fork-<topic>/src/tests/some_suite
+        args: TOKEN_SUITE
+        ssh_transport: openssh
+```
+
+See `sssd-qe-fork/metadata/pytest/pytest-client-ipa-ad.yaml` (CI shape).
 
 ---
 
@@ -222,7 +280,7 @@ Task progress:
 - [ ] 3. Copy closest metadata from table above; keep phase/playbook names
 - [ ] 4. Adjust domains (hosts, os tokens, pytest_mh / restraint_id)
 - [ ] 5. Adjust init repo checkout (repo URL, branch, repo_loc)
-- [ ] 6. Adjust test step path and TOKEN_ placeholders
+- [ ] 6. Adjust test step path and TOKEN_ placeholders (local @TESTRUNS: `~/git/<worktree>/...`, ignore init clone; Jenkins/CI: `../sssd/...` + `git: ../sssd`)
 - [ ] 7. Add test-plan job(s) with IDMCI_* options if CI-scheduled
 - [ ] 8. Validate YAML (sanity check)
 - [ ] 9. Local smoke: copy to ~/git/@TESTRUNS/<campaign>/twd/metadata.yaml and `te --upto prep`
@@ -248,8 +306,13 @@ IDMCI_REPLACE_TOKEN='SUITE:--collect-only|NAME:dryrun' \
 | Path form | Resolves to |
 |-----------|-------------|
 | `prep/redhat-base.yaml` | `$IDMCI/playbooks/prep/...` (built-in) |
-| `../my-repo/playbooks/foo.yaml` | Relative to `twd` (test project playbooks) |
+| `../sssd-ci-containers/src/ansible/playbook_vm.yml` | Init clone sibling under `@TESTRUNS/<campaign>/` (CI default) |
+| `~/git/cont-fork-<topic>/src/ansible/playbook_vm.yml` | Developer working copy (local @TESTRUNS; no sync) |
+| `../../../cont-fork-<topic>/src/ansible/playbook_vm.yml` | Same fork, relative from `twd` → `~/git/<fork>/` |
+| `../my-repo/playbooks/foo.yaml` | Relative to `twd` (other sibling checkouts) |
 | Inline `\| multiline yaml` | Embedded playbook (debug / one-off prep) |
+
+`pytest-mh:` / `pytests:` paths follow the same rule: `../sssd/...` (+ `git: ../sssd` for pytests) on Jenkins; `~/git/<worktree>/...` for local LTE only (init clone ignored, no sync).
 
 Built-in playbooks are in `idmci-fork-master/playbooks/`. Prefer existing names over new playbooks.
 
@@ -263,6 +326,7 @@ Built-in playbooks are in `idmci-fork-master/playbooks/`. Prefer existing names 
 - Duplicate `restraint_id` on multiple hosts.
 - Forgetting `provision/wait.yaml` after `mrack-up.yaml`.
 - Hard-coding pytest `-k` / importance in metadata instead of `TOKEN_SUITE` + jobs.yaml (harder to reuse).
+- Using `~/git/<worktree>/...` in committed metadata or Jenkins jobs — CI cannot see local worktrees; use `../sssd/...` there. Worktree paths are for `@TESTRUNS` metadata only.
 - AD host without trailing `-` on random string placeholders (`rnd-ld-5-1-`).
 
 ---

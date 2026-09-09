@@ -164,6 +164,8 @@ Qualification `options` (e.g. `IDMCI_REPLACE_OS`) apply to all jobs in that qual
 
 After `init`, canonical copy is `twd/config/metadata.yaml`. Named snapshots (`103metadata.yaml`, `metadata.mod.yaml`) are for iterating with `te -f <file>`.
 
+**Local fork paths:** In `@TESTRUNS` metadata, point `pytest-mh:` and sssd-ci-containers `playbook:` steps at `~/git/<fork>/...` (or `../../../<fork>/...` from `twd`) instead of `../sssd/...` / `../sssd-ci-containers/...`. The init clones can be ignored; no `sync-twd-tests` overlay. See the main skill's "Local @TESTRUNS: use git fork paths" section.
+
 ---
 
 ## Docs map (idmcidoc-fork-main)
