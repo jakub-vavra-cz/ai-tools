@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from ai_tools.dump_polarion_testcase import (
+from ai_tools.beetlejuice import (
     escape_property_value,
     parse_key_value_text,
     unescape_property_value,
@@ -152,7 +152,7 @@ class MatchTests(unittest.TestCase):
             },
         ]
         with patch(
-            "ai_tools.import_jira_testcase.search_issues",
+            "ai_tools.beetlejuice.search_issues",
             return_value=issues,
         ) as search:
             found = find_by_work_item_id(
@@ -171,7 +171,7 @@ class MatchTests(unittest.TestCase):
             {"key": "RHELTEST-2", "fields": {"summary": "Exact Title extra"}},
         ]
         with patch(
-            "ai_tools.import_jira_testcase.search_issues",
+            "ai_tools.beetlejuice.search_issues",
             return_value=issues,
         ):
             found = find_by_summary(
@@ -200,22 +200,22 @@ class ImportFlowTests(unittest.TestCase):
     def test_updates_when_id_matches(self) -> None:
         with (
             patch(
-                "ai_tools.import_jira_testcase.find_by_work_item_id",
+                "ai_tools.beetlejuice.find_by_work_item_id",
                 return_value=[{"key": "RHELTEST-7", "fields": {}}],
             ),
             patch(
-                "ai_tools.import_jira_testcase.find_by_summary",
+                "ai_tools.beetlejuice.find_by_summary",
             ) as summary_search,
-            patch("ai_tools.import_jira_testcase.update_issue") as update,
+            patch("ai_tools.beetlejuice.update_issue") as update,
             patch(
-                "ai_tools.import_jira_testcase.find_user_account_id",
+                "ai_tools.beetlejuice.find_user_account_id",
                 return_value=None,
             ),
             patch(
-                "ai_tools.import_jira_testcase.resolve_issue_type",
+                "ai_tools.beetlejuice.resolve_issue_type",
             ) as resolve_type,
             patch(
-                "ai_tools.import_jira_testcase.transition_issue_to_status",
+                "ai_tools.beetlejuice.transition_issue_to_status",
                 return_value=(True, None),
             ) as transition,
         ):
@@ -236,26 +236,26 @@ class ImportFlowTests(unittest.TestCase):
         dump = {**self.dump, "status": "Active"}
         with (
             patch(
-                "ai_tools.import_jira_testcase.find_by_work_item_id",
+                "ai_tools.beetlejuice.find_by_work_item_id",
                 return_value=[],
             ),
             patch(
-                "ai_tools.import_jira_testcase.find_by_summary",
+                "ai_tools.beetlejuice.find_by_summary",
             ) as summary_search,
             patch(
-                "ai_tools.import_jira_testcase.resolve_issue_type",
+                "ai_tools.beetlejuice.resolve_issue_type",
                 return_value={"id": "10239", "name": "Test Case"},
             ),
             patch(
-                "ai_tools.import_jira_testcase.create_issue",
+                "ai_tools.beetlejuice.create_issue",
                 return_value={"key": "RHELTEST-8"},
             ) as create,
             patch(
-                "ai_tools.import_jira_testcase.find_user_account_id",
+                "ai_tools.beetlejuice.find_user_account_id",
                 return_value=None,
             ),
             patch(
-                "ai_tools.import_jira_testcase.transition_issue_to_status",
+                "ai_tools.beetlejuice.transition_issue_to_status",
                 return_value=(True, None),
             ) as transition,
         ):
@@ -278,12 +278,12 @@ class ImportFlowTests(unittest.TestCase):
     def test_dry_run_update_skips_write(self) -> None:
         with (
             patch(
-                "ai_tools.import_jira_testcase.find_by_work_item_id",
+                "ai_tools.beetlejuice.find_by_work_item_id",
                 return_value=[{"key": "RHELTEST-7", "fields": {}}],
             ),
-            patch("ai_tools.import_jira_testcase.update_issue") as update,
+            patch("ai_tools.beetlejuice.update_issue") as update,
             patch(
-                "ai_tools.import_jira_testcase.find_user_account_id",
+                "ai_tools.beetlejuice.find_user_account_id",
                 return_value=None,
             ),
         ):
@@ -295,15 +295,15 @@ class ImportFlowTests(unittest.TestCase):
         dump = {"summary": "Import me", "description": "<p>hi</p>"}
         with (
             patch(
-                "ai_tools.import_jira_testcase.find_by_work_item_id",
+                "ai_tools.beetlejuice.find_by_work_item_id",
             ) as id_search,
             patch(
-                "ai_tools.import_jira_testcase.find_by_summary",
+                "ai_tools.beetlejuice.find_by_summary",
                 return_value=[{"key": "RHELTEST-9", "fields": {}}],
             ),
-            patch("ai_tools.import_jira_testcase.update_issue") as update,
+            patch("ai_tools.beetlejuice.update_issue") as update,
             patch(
-                "ai_tools.import_jira_testcase.find_user_account_id",
+                "ai_tools.beetlejuice.find_user_account_id",
                 return_value=None,
             ),
         ):
@@ -318,15 +318,15 @@ class ImportFlowTests(unittest.TestCase):
 
         with (
             patch(
-                "ai_tools.import_jira_testcase.find_by_work_item_id",
+                "ai_tools.beetlejuice.find_by_work_item_id",
                 return_value=[],
             ),
             patch(
-                "ai_tools.import_jira_testcase.find_by_summary",
+                "ai_tools.beetlejuice.find_by_summary",
                 return_value=[],
             ),
             patch(
-                "ai_tools.import_jira_testcase.resolve_issue_type",
+                "ai_tools.beetlejuice.resolve_issue_type",
                 side_effect=JiraError(
                     "issue type 'Test Case' is not available for creating "
                     "issues in project RHELTEST. Available: Bug, Task"
@@ -349,7 +349,7 @@ class ResolveIssueTypeTests(unittest.TestCase):
             api_token="tok",
         )
         with patch(
-            "ai_tools.import_jira_testcase.list_createable_issue_types",
+            "ai_tools.beetlejuice.list_createable_issue_types",
             return_value=[
                 {"id": "10014", "name": "Task"},
                 {"id": "10239", "name": "Test Case"},

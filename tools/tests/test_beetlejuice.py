@@ -10,18 +10,24 @@ from ai_tools.beetlejuice import (
     apply_dump_overrides,
     dump_filename_for_id,
     find_local_testcase_xmls,
-    jira_config_from_env,
+    find_local_testrun_xmls,
+    jira_config_from_idmci_env,
     map_sst_team,
     maybe_decompress,
     parse_directory_index_for_testcase_xmls,
+    parse_directory_index_for_testrun_xmls,
     parse_testcase_xml,
+    parse_testrun_xml,
     pairs_to_jira_dump,
     process_cases,
+    process_testrun_results,
     project_key_from_env,
     read_xml_bytes,
+    run_meta_for_document,
 )
-from ai_tools.dump_polarion_testcase import parse_key_value_file
-from ai_tools.import_jira_testcase import JiraError
+from ai_tools.beetlejuice import testrun_result_to_jira_dump as result_to_jira_dump
+from ai_tools.beetlejuice import parse_key_value_file
+from ai_tools.beetlejuice import JiraError
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "beetlejuice"
 
@@ -53,7 +59,7 @@ class IdmciJiraEnvTests(unittest.TestCase):
             "JIRA_API_TOKEN": "fallback-token",
         }
         with patch.dict("os.environ", env, clear=False):
-            cfg = jira_config_from_env()
+            cfg = jira_config_from_idmci_env()
         self.assertEqual(cfg.base_url, "https://idmci.example")
         self.assertEqual(cfg.email, "idmci@example.com")
         self.assertEqual(cfg.api_token, "idmci-token")
@@ -71,7 +77,7 @@ class IdmciJiraEnvTests(unittest.TestCase):
                 "IDMCI_JIRA_API_TOKEN",
             ):
                 os.environ.pop(key, None)
-            cfg = jira_config_from_env()
+            cfg = jira_config_from_idmci_env()
         self.assertEqual(cfg.base_url, "https://fallback.example")
         self.assertEqual(cfg.email, "fallback@example.com")
         self.assertEqual(cfg.api_token, "fallback-token")
@@ -84,7 +90,7 @@ class IdmciJiraEnvTests(unittest.TestCase):
         with patch.dict("os.environ", env, clear=False):
             for key in ("IDMCI_JIRA_URL", "JIRA_URL"):
                 os.environ.pop(key, None)
-            cfg = jira_config_from_env()
+            cfg = jira_config_from_idmci_env()
         self.assertEqual(cfg.base_url, "https://stage-redhat.atlassian.net")
         self.assertEqual(cfg.email, "idmci@example.com")
 
@@ -101,7 +107,7 @@ class IdmciJiraEnvTests(unittest.TestCase):
             ):
                 os.environ.pop(key, None)
             with self.assertRaises(JiraError):
-                jira_config_from_env()
+                jira_config_from_idmci_env()
 
 
 class GzipTests(unittest.TestCase):
@@ -307,6 +313,125 @@ class ProcessDumpTests(unittest.TestCase):
         self.assertEqual(results[0].import_result["action"], "dry-run-create")
 
 
+class ParseRunSampleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.doc = parse_testrun_xml(
+            (FIXTURES / "run-sample.xml").read_bytes(),
+            source="run-sample.xml",
+        )
+
+    def test_document_meta(self) -> None:
+        self.assertEqual(self.doc.project_id, "RHEL_IDM")
+        self.assertEqual(self.doc.lookup_method, "custom")
+        self.assertEqual(self.doc.testrun_title, "pytest-sudo-tier1")
+        self.assertEqual(len(self.doc.results), 3)
+
+    def test_custom_fields(self) -> None:
+        self.assertEqual(self.doc.custom_fields.get("component"), "sudo")
+        self.assertEqual(self.doc.custom_fields.get("composeid"), "RHEL-10.2-20260408.1")
+
+    def test_outcomes(self) -> None:
+        by_id = {row["test_case_id"]: row for row in self.doc.results}
+        self.assertEqual(by_id["idm-sudo-tc::tests/test_foo.py::test_pass"]["status"], "PASS")
+        self.assertEqual(by_id["idm-sudo-tc::tests/test_foo.py::test_fail"]["status"], "FAIL")
+        self.assertEqual(by_id["idm-sudo-tc::tests/test_foo.py::test_skip"]["status"], "Blocked")
+
+    def test_jira_dump_mapping(self) -> None:
+        run_meta = run_meta_for_document(self.doc)
+        dump = result_to_jira_dump(
+            self.doc.results[0],
+            run_meta=run_meta,
+        )
+        self.assertEqual(dump["status"], "PASS")
+        self.assertEqual(dump["components"], "sudo")
+        self.assertEqual(dump["AssignedTeam"], "rhel-idm-sudo")
+        self.assertEqual(dump["Architecture"], "x86_64")
+        self.assertEqual(dump["Compose Version"], "RHEL-10.2-20260408.1")
+        self.assertIn("metadata_html", run_meta)
+
+
+class TestrunDirectoryTests(unittest.TestCase):
+    def test_find_local_file(self) -> None:
+        one = find_local_testrun_xmls(FIXTURES / "run-sample.xml")
+        self.assertEqual(one, [FIXTURES / "run-sample.xml"])
+
+    def test_parse_index(self) -> None:
+        html = """
+        <a href="/path/polarion/import-testrun.xml">import-testrun.xml</a>
+        <a href="suite_import-testrun.xml">x</a>
+        """
+        urls = parse_directory_index_for_testrun_xmls(
+            html,
+            "https://example.com/path/polarion/",
+        )
+        self.assertEqual(
+            urls,
+            [
+                "https://example.com/path/polarion/import-testrun.xml",
+                "https://example.com/path/polarion/suite_import-testrun.xml",
+            ],
+        )
+
+
+class ProcessTestrunDumpTests(unittest.TestCase):
+    def test_write_dumps(self) -> None:
+        doc = parse_testrun_xml((FIXTURES / "run-sample.xml").read_bytes())
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            results = process_testrun_results(
+                [doc],
+                output_dir=out,
+                do_import=False,
+                jira_config=None,
+                project_key="RHELTEST",
+                issue_type="Test Result",
+                dry_run=False,
+                skip_assignee=True,
+                skip_components=True,
+                limit=1,
+            )
+            self.assertEqual(len(results), 1)
+            self.assertIsNone(results[0].error)
+            dump_path = Path(results[0].dump_path or "")
+            self.assertTrue(dump_path.is_file())
+            parsed = parse_key_value_file(dump_path)
+            self.assertEqual(parsed["TestCaseID"], results[0].test_case_id)
+            self.assertEqual(parsed["status"], "PASS")
+
+    def test_import_dry_run_mocked(self) -> None:
+        doc = parse_testrun_xml((FIXTURES / "run-sample.xml").read_bytes())
+        fake = type(
+            "R",
+            (),
+            {
+                "to_dict": staticmethod(
+                    lambda: {
+                        "action": "dry-run-create",
+                        "issue_key": None,
+                        "parent_key": "RHELTEST-1",
+                        "match": "parent-id",
+                        "browse_url": None,
+                    }
+                )
+            },
+        )()
+        with patch("ai_tools.beetlejuice.import_testresult", return_value=fake):
+            results = process_testrun_results(
+                [doc],
+                output_dir=None,
+                do_import=True,
+                jira_config=object(),  # type: ignore[arg-type]
+                project_key="RHELTEST",
+                issue_type="Test Result",
+                dry_run=True,
+                skip_assignee=True,
+                skip_components=True,
+                limit=1,
+            )
+        self.assertEqual(results[0].import_result["action"], "dry-run-create")
+
+
 class CliSubcommandTests(unittest.TestCase):
     def test_test_case_dump(self) -> None:
         from ai_tools.beetlejuice import main
@@ -325,11 +450,28 @@ class CliSubcommandTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertTrue(any(Path(tmp).glob("*.properties")))
 
-    def test_test_run_not_implemented(self) -> None:
+    def test_test_run_dump(self) -> None:
         from ai_tools.beetlejuice import main
 
-        code = main(["test-run"])
-        self.assertEqual(code, 1)
+        with tempfile.TemporaryDirectory() as tmp:
+            code = main(
+                [
+                    "test-run",
+                    str(FIXTURES / "run-sample.xml"),
+                    "-o",
+                    tmp,
+                    "--limit",
+                    "1",
+                ]
+            )
+            self.assertEqual(code, 0)
+            self.assertTrue(any(Path(tmp).glob("*.properties")))
+
+    def test_test_run_requires_action(self) -> None:
+        from ai_tools.beetlejuice import main
+
+        code = main(["test-run", str(FIXTURES / "run-sample.xml")])
+        self.assertEqual(code, 2)
 
     def test_requires_subcommand(self) -> None:
         from ai_tools.beetlejuice import main
