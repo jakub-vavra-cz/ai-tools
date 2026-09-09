@@ -117,7 +117,7 @@ Use only when the question is about maintaining IdM-CI, designs, packaging, or s
 | Ask about… | Start with |
 |-------------|------------|
 | What is IdM-CI / how do I start | `intro/user_getting_started.adoc` |
-| `te`, LTE, controller, twd | `intro/user_getting_started.adoc` |
+| `te`, LTE, controller, twd | `intro/user_getting_started.adoc` — agent skill: [run-te](../run-te/SKILL.md) |
 | `metadata.yaml`, domains, hosts | `job_files.adoc`, `pipeline_domains_specifications.adoc` |
 | phases, steps, playbooks | `pipeline_phases_steps.adoc`, `playbooks.adoc` |
 | TOKEN_, IDMCI_*, compose override | `metadata_modifier.adoc`, `ENVVARS.adoc` |

@@ -33,6 +33,7 @@ If the clone is still missing, create/update via `create_worktree_branch` / `lis
 | Need | Skill |
 |------|-------|
 | Author `metadata.yaml` / test-plan jobs | [create-idmci-metadata](../create-idmci-metadata/SKILL.md) |
+| `te` CLI, phase flags, twd outputs | [run-te](../run-te/SKILL.md) |
 | Run `te` / `@TESTRUNS` campaigns | [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md) |
 | Run metadata on Jenkins (`trigger-test-suite-tool`) | [run-idm-jenkins](../run-idm-jenkins/SKILL.md) |
 | Diagnose a Jenkins build URL | [analyze-jenkins-failure](../analyze-jenkins-failure/SKILL.md) |
