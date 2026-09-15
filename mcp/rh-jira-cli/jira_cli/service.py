@@ -10,8 +10,10 @@ from jira_cli.api import JiraApiError, JiraClient
 from jira_cli.commands import edit_issue as edit_issue_cmd
 from jira_cli.commands import agenda as agenda_cmd
 from jira_cli.commands import backlog as backlog_cmd
+from jira_cli.commands import field_map as field_map_cmd
 from jira_cli.commands import issue_link as issue_link_cmd
 from jira_cli.commands import list_issues as list_issues_cmd
+from jira_cli.commands import archive as archive_cmd
 from jira_cli.commands import move_issue as move_issue_cmd
 from jira_cli.commands import new_issue as new_issue_cmd
 from jira_cli.commands import search_issues as search_issues_cmd
@@ -568,8 +570,7 @@ class JiraService:
         """Issue links on one ticket (compact rows)."""
         links = issue_link_cmd.fetch_issue_links(self.client, issue_key)
         rows = [
-            issue_link_cmd.summarize_issue_link(link, perspective_key=issue_key)
-            for link in links
+            issue_link_cmd.summarize_issue_link(link, perspective_key=issue_key) for link in links
         ]
         return {"issue_key": issue_key, "links": rows}
 
@@ -591,6 +592,20 @@ class JiraService:
         )
         if rc != 0:
             msg = err.getvalue().strip() or f"move_issue failed with code {rc}"
+            raise ValueError(msg) if rc == 2 else JiraApiError(msg, status_code=None)
+        assert payload is not None
+        return payload
+
+    def archive_issues(self, issue_keys: list[str]) -> dict[str, Any]:
+        """Archive issues by key (PUT /rest/api/3/issue/archive)."""
+        err = StringIO()
+        payload, rc = archive_cmd.execute_archive_issues(
+            self.client,
+            issue_keys=issue_keys,
+            err=err,
+        )
+        if rc != 0:
+            msg = err.getvalue().strip() or f"archive_issues failed with code {rc}"
             raise ValueError(msg) if rc == 2 else JiraApiError(msg, status_code=None)
         assert payload is not None
         return payload

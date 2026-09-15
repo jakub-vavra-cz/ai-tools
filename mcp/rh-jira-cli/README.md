@@ -22,7 +22,7 @@ jira-cli-mcp
 ```
 
 For Cursor `uvx`, pass `--with fastmcp>=2` (see the [repo root README](../../README.md#install-mcp-via-uvx)).
-The server sets `JIRA_CLI_NO_INPUT=1` by default. Tools mirror the CLI: `jira_list_mine`, `jira_list_for_email`, `jira_search`, `jira_get_issue`, `jira_create_issue`, `jira_update_issue`, `jira_agenda`, `jira_backlog`, `jira_list_link_types`, `jira_create_issue_link`, `jira_create_issue_link_explicit`, `jira_delete_issue_link`, `jira_list_issue_links`, `jira_move_issue`, `jira_list_fields`, `jira_get_transitions`, `jira_list_sprints`.
+The server sets `JIRA_CLI_NO_INPUT=1` by default. Tools mirror the CLI: `jira_list_mine`, `jira_list_for_email`, `jira_search`, `jira_get_issue`, `jira_create_issue`, `jira_update_issue`, `jira_agenda`, `jira_backlog`, `jira_list_link_types`, `jira_create_issue_link`, `jira_create_issue_link_explicit`, `jira_delete_issue_link`, `jira_list_issue_links`, `jira_move_issue`, `jira_archive`, `jira_list_fields`, `jira_get_transitions`, `jira_list_sprints`.
 
 For programmatic use without MCP, import `JiraService` from `jira_cli.service` (structured dict/list results, no argparse).
 
@@ -139,6 +139,13 @@ jira-cli unlink 2045989
 jira-cli move PROJ-123 --project NEWPROJ
 jira-cli move PROJ-123 --project NEWPROJ --type Story
 jira-cli move PROJ-123 --project NEWPROJ --json
+```
+
+**Archive issues** (`PUT /rest/api/3/issue/archive`). Requires Jira admin permission. Accepts up to 1000 keys per request. Prints the archived count on stdout; partial failures are listed on stderr.
+
+```bash
+jira-cli archive PROJ-123 PROJ-124
+jira-cli archive PROJ-123,PROJ-124 --json
 ```
 
 **Edit** (non-interactive):

@@ -515,6 +515,19 @@ class JiraClient:
         """DELETE /rest/api/3/issueLink/{linkId}."""
         self.request("DELETE", f"/rest/api/3/issueLink/{link_id.strip()}")
 
+    def archive_issues(self, issue_ids_or_keys: list[str]) -> dict[str, Any]:
+        """Archive issues; PUT /rest/api/3/issue/archive (up to 1000 keys per request)."""
+        data = self.request(
+            "PUT",
+            "/rest/api/3/issue/archive",
+            json_body={"issueIdsOrKeys": issue_ids_or_keys},
+        )
+        if data is None:
+            raise JiraApiError("PUT /rest/api/3/issue/archive returned empty body")
+        if not isinstance(data, dict):
+            raise JiraApiError("PUT /rest/api/3/issue/archive returned unexpected payload")
+        return data
+
 
 def _plain_text_to_adf(text: str) -> dict[str, Any]:
     paragraphs = text.split("\n\n") if "\n\n" in text else [text]

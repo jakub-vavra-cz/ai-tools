@@ -349,6 +349,16 @@ def main() -> None:
         )
 
     @mcp.tool()
+    def jira_archive(issue_keys: list[str]) -> dict[str, Any]:
+        """
+        Archive issues by key (PUT /rest/api/3/issue/archive).
+
+        Accepts up to 1000 issue keys per call. Requires Jira admin permission.
+        Returns ``numberOfIssuesUpdated`` and per-issue ``errors`` when some keys fail.
+        """
+        return get_svc().archive_issues(issue_keys)
+
+    @mcp.tool()
     def jira_list_fields(
         include_builtin: bool = False,
         search: str | None = None,

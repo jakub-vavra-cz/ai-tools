@@ -14,6 +14,7 @@ from jira_cli.commands import edit_issue as edit_issue_cmd
 from jira_cli.commands import issue_link as issue_link_cmd
 from jira_cli.commands import field_map as field_map_cmd
 from jira_cli.commands import list_issues as list_issues_cmd
+from jira_cli.commands import archive as archive_cmd
 from jira_cli.commands import move_issue as move_issue_cmd
 from jira_cli.commands import new_issue as new_issue_cmd
 from jira_cli.commands import search_issues as search_issues_cmd
@@ -576,6 +577,16 @@ def _cmd_move(client: JiraClient, _settings, args: argparse.Namespace) -> int:
     )
 
 
+def _cmd_archive(client: JiraClient, _settings, args: argparse.Namespace) -> int:
+    return archive_cmd.run_archive(
+        client,
+        issue_keys=args.issue_keys,
+        as_json=getattr(args, "json", False),
+        out=sys.stdout,
+        err=sys.stderr,
+    )
+
+
 def _cmd_transitions(client: JiraClient, _settings, args: argparse.Namespace) -> int:
     try:
         data = client.get_transitions(
@@ -620,7 +631,7 @@ def _cmd_sprints(client: JiraClient, _settings, args: argparse.Namespace) -> int
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="jira-cli",
-        description="Jira REST CLI: list/show issues, agenda, backlog, fields/field-map, edit, link, move, transitions, sprints.",
+        description="Jira REST CLI: list/show issues, agenda, backlog, fields/field-map, edit, link, move, archive, transitions, sprints.",
     )
 
     sub = p.add_subparsers(dest="command", required=True)
@@ -1416,6 +1427,19 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument("--json", action="store_true", help="Print move result as JSON")
     pm.set_defaults(handler=_cmd_move, issue_type=None)
 
+    par = sub.add_parser(
+        "archive",
+        help="Archive issues (PUT /rest/api/3/issue/archive)",
+    )
+    par.add_argument(
+        "issue_keys",
+        nargs="+",
+        metavar="ISSUE_KEY",
+        help="Issue keys to archive, e.g. PROJ-1 PROJ-2",
+    )
+    par.add_argument("--json", action="store_true", help="Print archive result as JSON")
+    par.set_defaults(handler=_cmd_archive)
+
     plt = sub.add_parser("link-types", help="List Jira issue link types")
     plt.add_argument(
         "--search",
@@ -1443,7 +1467,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--type",
         required=True,
         metavar="NAME",
-        help='Link type name, e.g. Blocks, Relates',
+        help="Link type name, e.g. Blocks, Relates",
     )
     plk.add_argument(
         "--as",
