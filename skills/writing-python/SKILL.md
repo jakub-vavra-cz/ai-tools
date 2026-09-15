@@ -194,6 +194,13 @@ Summary of that skill’s gate (details live there):
 2. Fallback when nothing is configured: `ruff check` + `ruff format` on changed files.
 3. Otherwise: project stack (ruff-only, or flake8 → isort → Black as applicable).
 
+### idm-ci
+
+**idm-ci** enforces **flake8** in GitLab CI (`flake8_check` in `.gitlab-ci.yml`) and
+pre-commit. After Python edits in an idm-ci tree, run `flake8` on every changed
+`.py` file and fix all reported issues before finishing (line length 88 per
+`setup.cfg`).
+
 ---
 
 ## Order of operations
@@ -211,6 +218,7 @@ Summary of that skill’s gate (details live there):
 | Skill / tree | Role |
 |--------------|------|
 | [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md) | Lint/format after Python edits |
+| `idm-ci` (`setup.cfg`, `.gitlab-ci.yml`) | flake8 required on changed `.py` files |
 | [caveman lite](https://github.com/JuliusBrussee/caveman/blob/main/skills/caveman/SKILL.md) | Voice reference for comments/docstrings |
 | [writing-ansible](../writing-ansible/SKILL.md) | Ansible YAML (not Python) |
 | `ai-tools/tools/ai_tools/clone_review.py`, `beetlejuice.py` | Reference Click CLIs |
