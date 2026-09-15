@@ -37,6 +37,7 @@ pip install -e /path/to/ai-tools/tools
 | `te-test-summary` | Extract the pytest/te short summary from a `twd` for a Jira draft |
 | `run-idm-jenkins` | Upload metadata as an sssd-qe GitLab snippet; print Jenkins trigger params |
 | `decompress-logs` | Decompress gzip IdM-CI / Jenkins log artifacts (incl. misnamed `.gz`) |
+| `bugzilla` | Query Bugzilla REST API (`get`, `search`, `config`) |
 
 ### clean-twd
 
@@ -455,7 +456,8 @@ Overlay a local test checkout onto the campaign clone next to `twd` (after
 `.pytest_cache`. Does **not** `--delete`. Dest must be a sibling of a
 validated twd (or a path under that sibling), never inside `twd`.
 
-Used by [ticket-pre-verification](../skills/ticket-pre-verification/SKILL.md).
+Used by [ticket-pre-verification](../skills/ticket-pre-verification/SKILL.md)
+and [ticket-verification](../skills/ticket-verification/SKILL.md).
 
 ```bash
 cd ~/git/@TESTRUNS/<campaign>/twd
@@ -491,8 +493,10 @@ twd-rpm install --twd . --json
 twd-rpm install --hosts dns --rpm-dir ./brew-rpms -n
 ```
 
-`query` prints `older` / `same` / `newer` / `missing` per host. `install`
-copies `brew-rpms/` and runs `dnf install -y`. Exit `0` on success, `1` on
+`query` prints `older` / `same` / `newer` / `missing` per host. Used by
+[ticket-verification](../skills/ticket-verification/SKILL.md) to confirm the
+compose already has Fixed in Build. `install` copies `brew-rpms/` and runs
+`dnf install -y` (pre-verification path). Exit `0` on success, `1` on
 ansible/dnf failure, `2` on bad NVR/args.
 
 ### te-test-summary
@@ -625,6 +629,38 @@ decompress-logs /tmp/jenkins-123/logs --remove-source
 
 Writes plain files next to the sources (`.log.gz` → `.log`). Use `--force` to
 replace existing outputs. Exit `0` on success, `2` on error.
+
+### bugzilla
+
+Query [Red Hat Bugzilla](https://bugzilla.redhat.com/) via the REST API.
+Authentication uses `Authorization: Bearer` with an API key from Bugzilla
+Preferences → API Keys.
+
+Environment:
+
+| Variable | Required | Default |
+|----------|----------|---------|
+| `BUGZILLA_API_TOKEN` | yes | — |
+| `BUGZILLA_HOST` | no | `https://bugzilla.redhat.com` |
+| `BUGZILLA_USERNAME` | no | — (used by `search --mine`) |
+
+```bash
+export BUGZILLA_API_TOKEN=<api-key>
+export BUGZILLA_HOST=bugzilla.redhat.com
+export BUGZILLA_USERNAME=user@redhat.com
+
+bugzilla config
+bugzilla get 1002592
+bugzilla get 1002592,1547234 --json
+bugzilla search --component sssd --status CLOSED --summary GPO --limit 10
+bugzilla search --mine --status NEW
+bugzilla search --quicksearch "sssd ad forest" --json
+```
+
+`get` accepts multiple ids and comma-separated lists. `search` requires at
+least one filter (`--product`, `--component`, `--status`, `--summary`,
+`--assigned-to`, `--mine`, `--creator`, or `--quicksearch`). Exit `0` on success, `1` when
+`search` finds no bugs, `2` on configuration or API errors.
 
 ## Tests
 

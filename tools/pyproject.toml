@@ -32,6 +32,7 @@ decompress-logs = "ai_tools.decompress_logs:main"
 jenkins-to-testrun = "ai_tools.jenkins_to_testrun:main"
 artifact-grep = "ai_tools.artifact_grep:main"
 idmci-rerun-failed = "ai_tools.idmci_rerun_failed:main"
+bugzilla = "ai_tools.bugzilla:main"
 
 [project.optional-dependencies]
 polarion-yaml = ["PyYAML>=6"]
