@@ -12,6 +12,7 @@ from ai_tools.review_pr import (
     classify_changed_files,
     format_report,
     is_ansible_yaml_path,
+    partition_existing_files,
     run_review,
 )
 
@@ -32,6 +33,17 @@ class ClassifyFilesTests(unittest.TestCase):
     def test_ansible_path_heuristic(self) -> None:
         self.assertTrue(is_ansible_yaml_path("roles/ldap/tasks/main.yml"))
         self.assertFalse(is_ansible_yaml_path(".gitlab-ci.yml"))
+
+    def test_partition_skips_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "keep.py").write_text("x = 1\n", encoding="utf-8")
+            present, missing = partition_existing_files(
+                root,
+                ["keep.py", "gone.py", "also/gone.yml"],
+            )
+            self.assertEqual(present, ["keep.py"])
+            self.assertEqual(missing, ["gone.py", "also/gone.yml"])
 
 
 class FormatReportTests(unittest.TestCase):
@@ -131,6 +143,46 @@ class RunReviewTests(unittest.TestCase):
                             )
 
             self.assertIsNotNone(report.python)
+            self.assertTrue(report.ok)
+
+    def test_skips_deleted_files_when_linting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "@REVIEWS"
+            root.mkdir()
+            clone = root / "demo-pr2"
+            clone.mkdir()
+            (clone / ".git").mkdir()
+            (clone / "kept.py").write_text("x = 1\n", encoding="utf-8")
+            (clone / "pyproject.toml").write_text("[tool.ruff]\n", encoding="utf-8")
+
+            checkout = ReviewCheckout(
+                platform="github",
+                host="github.com",
+                repo="org/demo",
+                number=2,
+                kind="pr",
+                clone_path=str(clone),
+                created=True,
+                target_branch="master",
+                base_ref="origin/master",
+                base_sha="abc",
+                head_sha="def",
+                head_ref="topic",
+                changed_files=["kept.py", "deleted.py"],
+                diff_stat="2 files changed",
+            )
+
+            with patch("ai_tools.review_pr.prepare_review", return_value=checkout):
+                with patch("ai_tools.check_python.which", return_value="/usr/bin/ruff"):
+                    with patch("subprocess.run") as mock_subprocess:
+                        mock_subprocess.return_value.returncode = 0
+                        mock_subprocess.return_value.stdout = "All checks passed!\n"
+                        mock_subprocess.return_value.stderr = ""
+                        report = run_review("org/demo#2", reviews_root=root)
+
+            self.assertIsNotNone(report.python)
+            self.assertEqual(report.python.paths, ["kept.py"])
+            self.assertIn("deleted.py", report.skipped_lint)
             self.assertTrue(report.ok)
 
 

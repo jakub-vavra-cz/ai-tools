@@ -19,76 +19,129 @@ description: >-
 
 User wants to **review** a PR/MR or branch they do not already have checked out, and to **run linters** on only what changed. This skill is **read-only** for the remote code (report results; do not reformat unless the user asks).
 
+**Never post comments, reviews, approvals, or requests-for-changes on the PR/MR autonomously.** Report findings only in the chat. Leave GitHub/GitLab review actions to the user unless they explicitly ask you to submit a review or comment.
+
 If you **edit** Python in a workspace after review, use the project skill [run-python-static-analysis](../run-python-static-analysis/SKILL.md) for lint and format rules on your own changes.
+
+All commands below come from [ai-tools/tools](../../tools/README.md). Install
+once with `pip install -e ~/git/ai-tools/tools`. **Never use raw `cd <clone> && git diff …` or ad-hoc `gh` / `glab` / `git` sequences** — the ai-tools CLIs handle clone management, merge-base computation, diff, lint discovery, and cleanup in a safe, consistent way.
 
 ---
 
-## 1. Clone with `clone-review` (preferred)
+## 1. Clone + lint with `review-pr` (one-shot, preferred)
 
-**One-shot:** `review-pr` runs clone + lint in a single command (see below).
-For step-by-step control, use the individual tools.
-
-Prefer the approved CLI from [ai-tools/tools](../../tools/README.md) over ad-hoc
-`gh` / `glab` / `git` sequences. Install once:
-
-```bash
-pip install -e ~/git/ai-tools/tools
-```
+A single command clones the PR/MR under `~/git/@REVIEWS`, discovers changed
+files, and runs project-appropriate linters (Python via `check-python`, Ansible
+via `check-ansible`):
 
 ```bash
 review-pr https://github.com/OWNER/REPO/pull/N --json -q
-review-pr https://github.com/OWNER/REPO/pull/N --cleanup
+review-pr https://gitlab.cee.redhat.com/GROUP/REPO/-/merge_requests/N --json -q
+review-pr identity-management/idm-ci!2726 --host gitlab.cee.redhat.com --json -q
 ```
 
-Or step by step:
+Always pass **`--json`** (machine-readable) and **`-q`** (omit verbose file
+lists). The JSON result contains everything needed for the rest of the review:
 
-```bash
-clone-review https://github.com/OWNER/REPO/pull/N --json
-clone-review https://gitlab.cee.redhat.com/GROUP/REPO/-/merge_requests/N --json
-clone-review identity-management/idm-ci!2726 --host gitlab.cee.redhat.com --json
-```
+| JSON field | Use |
+|------------|-----|
+| `checkout.clone_path` | Working tree for reading full files |
+| `checkout.base_ref` / `checkout.base_sha` | Merge-base vs target branch |
+| `checkout.head_sha` | PR/MR tip |
+| `checkout.changed_files` | Lint scope and review scope |
+| `diff_stat` | Short summary for the report |
+| `lint_ok` | Overall lint pass/fail |
+| `python.ok` / `python.results[]` | Per-tool lint details |
 
 | Flag | Purpose |
 |------|---------|
-| `reference` | PR/MR URL, or `owner/repo#N` / `group/proj!N` |
-| `--root` | Parent dir (default `~/git/@REVIEWS` or `$CLONE_REVIEW_ROOT`); must contain `reviews` |
-| `--name` | Clone dirname (default `<repo>-prN` / `<repo>-mrN`) |
-| `--platform` / `--host` | Force platform/host for shorthand |
-| `--no-refresh` | Reuse existing clone; only recompute the diff |
-| `--json` | Machine-readable result (use this for agents) |
-| `-q` | Omit file list / diffstat from text output |
+| `--no-refresh` | Reuse existing clone; only recompute diff and lint |
+| `--skip-lint` | Clone and list changes only (no linter run) |
+| `--include-diff` | Embed full patch in output (usually prefer `review-diff` instead) |
+| `--cleanup` | Remove review clone after the run |
+| `--root` / `--name` / `--platform` / `--host` | Override clone location or platform detection |
 
-Exit: `0` success, `2` error.
+Exit: `0` linters pass, `1` lint failure, `2` error.
 
-From the JSON (or text) report, take:
+### Step-by-step alternative (when you need individual control)
 
-| Field | Use |
-|-------|-----|
-| `clone_path` | Working tree for lint / reading the diff |
-| `base_ref` / `base_sha` | Merge-base vs target/default branch |
-| `head_sha` | PR/MR tip |
-| `changed_files` | Lint scope |
-| `diff_stat` | Short summary for the review report |
+Use the component commands separately only when the one-shot flow is not
+appropriate (e.g. re-running lint after the author pushes a fix, or when you
+need a different lint scope):
 
-**Diff:** use `review-diff` for the patch without re-running `git diff` manually:
+| Command | Purpose |
+|---------|---------|
+| `clone-review REFERENCE --json` | Clone / refresh checkout; list changed files |
+| `check-python path.py --root <clone_path> --json` | Lint specific Python files |
+| `check-ansible path.yml --json` | Lint specific Ansible files |
+| `review-diff REFERENCE` | Print the patch (see section 2) |
+| `cleanup-review REFERENCE` | Remove the clone (see section 4) |
+
+---
+
+## 2. Read the diff with `review-diff`
+
+After `review-pr` (or `clone-review`), use **`review-diff`** to get the patch.
+Do **not** `cd` into the clone and run `git diff` manually — `review-diff`
+handles merge-base detection, clone lookup, and API fallback automatically:
 
 ```bash
-review-diff REFERENCE
-review-diff REFERENCE --name-only
-review-diff REFERENCE --stat --json
+review-diff REFERENCE                # full patch to stdout
+review-diff REFERENCE --name-only    # changed file paths only
+review-diff REFERENCE --stat         # diffstat summary
+review-diff REFERENCE --stat --json  # machine-readable diffstat
+review-diff REFERENCE -o /tmp/pr.patch  # write to file
 ```
 
-**Cleanup:** when the review is done:
+`REFERENCE` is the same PR/MR URL or shorthand used in step 1.
+
+When the clone already exists (from `review-pr` / `clone-review`), `review-diff`
+uses the local checkout. Otherwise it falls back to `gh pr diff` / `glab mr diff`.
+
+For reading full changed files (not just the diff), use the **Read** tool on
+paths under `clone_path` from the `review-pr` JSON.
+
+---
+
+## 3. Evaluate the change (after linters)
+
+Read the patch via **`review-diff REFERENCE`** and full changed files from
+`clone_path` as needed. Focus on the PR's intent and regressions, not style
+(linters already covered that).
+
+**Docstrings and comments**
+
+- Public APIs, modules, classes, and non-obvious functions: docstrings should state purpose, non-obvious parameters/returns/raises/side effects, and units where relevant.
+- For **added or changed** docstrings, compare nearby and same-layer symbols in the file or package: tone, section order (e.g. Args/Returns/Raises), imperative vs declarative voice, blank-line layout, reStructuredText/Google/NumPy/Sphinx style, and cross-reference patterns should **match existing conventions** in that codebase—not introduce a one-off format.
+- Flag **missing** docstrings where the project or language norms expect them; **vague** or **stale** text (wrong behavior, wrong types, copy-paste); **misleading** names vs behavior.
+- Inline comments: only where they add "why"; remove or fix comments that contradict the code.
+
+**General code quality**
+
+- **Correctness:** edge cases, error paths, resource cleanup, concurrency, security-sensitive use of input.
+- **Structure:** clear naming, reasonable function size, duplication, layering leaks.
+- **Tests:** if behavior changed, tests or types should reflect it; note gaps.
+- **Compatibility:** API/ABI/config migrations if the diff touches interfaces.
+
+Classify findings (e.g. must-fix / should-fix / nit) and tie each to a file or hunk. Prefer a short list of high-signal items over an exhaustive nitpick.
+
+---
+
+## 4. Report and cleanup
+
+Summarize: `clone_path`, `base_ref` / SHAs, changed files, **linter** pass/fail (from `review-pr` JSON), then **quality/docstring** findings from section 3 (or state none worth noting).
+
+**Cleanup** when finished:
 
 ```bash
-cleanup-review REFERENCE
-cleanup-review --all
+cleanup-review REFERENCE       # remove the specific clone
+cleanup-review --all           # remove all review clones
+cleanup-review REFERENCE -n    # dry-run
 ```
 
-**Safety:** `clone-review` refuses destinations whose resolved path does not
-contain `reviews`, and will not overwrite an unrelated existing clone.
+---
 
-### Manual fallback (only if CLI unavailable)
+## Manual fallback (only if ai-tools CLIs are unavailable)
 
 - Prefer **`gh`** for GitHub; **`glab`** for GitLab.
 - Clone under `~/git/@REVIEWS/` with a distinct name (`REPO-prN` / `REPO-mrN`).
@@ -102,50 +155,5 @@ git diff --name-only "$BASE"..HEAD
 git diff --stat "$BASE"..HEAD
 ```
 
----
-
-## 2. Run appropriate linters (read-only for review)
-
-Run tools **from the clone root** (`clone_path`) so repo configs apply (`setup.cfg`, `tox.ini`, `.flake8`, `pyproject.toml`, `.pre-commit-config.yaml`).
-
-| Changed files | Action |
-|---------------|--------|
-| `*.py` | `check-python` on those paths (discovers ruff / flake8 / black / isort from project config). Manual fallback: `flake8`, `black --check`, `ruff check` per [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md). |
-| Ansible `*.yml` / `*.yaml` | Prefer [writing-ansible](../writing-ansible/SKILL.md) / `check-ansible` (system + uvx pins). |
-| `*.toml` / `*.cfg` / `*.ini` | Only run Python tools if they are clearly the lint config; otherwise skip. |
-| JS/TS | If `package.json` has `lint` or `eslint`, run `npm ci` or `pnpm install` only when needed, then the documented lint script on changed files or the package scope the project uses. |
-| Go / Rust / etc. | Run `golangci-lint`, `cargo clippy`, etc. only when the repo defines them and changed files match. |
-
-**Review default:** use check-only mode (`black --check`, `ruff check` without `--fix`) unless the user asked to auto-fix.
-
-If a tool is missing, say which package or dev extra installs it; do not assume global install.
-
----
-
-## 3. Evaluate the change (after linters)
-
-Read **`git diff "$base_sha".."$head_sha"`** from `clone_path` (and new/changed symbols in `changed_files`). Focus on the PR’s intent and regressions, not style (linters already covered that).
-
-**Docstrings and comments**
-
-- Public APIs, modules, classes, and non-obvious functions: docstrings should state purpose, non-obvious parameters/returns/raises/side effects, and units where relevant.
-- For **added or changed** docstrings, compare nearby and same-layer symbols in the file or package: tone, section order (e.g. Args/Returns/Raises), imperative vs declarative voice, blank-line layout, reStructuredText/Google/NumPy/Sphinx style, and cross-reference patterns should **match existing conventions** in that codebase—not introduce a one-off format.
-- Flag **missing** docstrings where the project or language norms expect them; **vague** or **stale** text (wrong behavior, wrong types, copy-paste); **misleading** names vs behavior.
-- Inline comments: only where they add “why”; remove or fix comments that contradict the code.
-
-**General code quality**
-
-- **Correctness:** edge cases, error paths, resource cleanup, concurrency, security-sensitive use of input.
-- **Structure:** clear naming, reasonable function size, duplication, layering leaks.
-- **Tests:** if behavior changed, tests or types should reflect it; note gaps.
-- **Compatibility:** API/ABI/config migrations if the diff touches interfaces.
-
-Classify findings (e.g. must-fix / should-fix / nit) and tie each to a file or hunk. Prefer a short list of high-signal items over an exhaustive nitpick.
-
----
-
-## 4. Report
-
-Summarize: `clone_path`, `base_ref` / SHAs, changed files, **linter** pass/fail and commands, then **quality/docstring** findings from section 3 (or state none worth noting).
-
-**Cleanup:** run `cleanup-review REFERENCE` (or `cleanup-review --all`) when finished.
+- Lint Python: `flake8`, `black --check`, `ruff check` per [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md).
+- Lint Ansible: per [writing-ansible](../writing-ansible/SKILL.md).

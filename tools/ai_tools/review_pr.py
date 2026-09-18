@@ -97,6 +97,21 @@ def classify_changed_files(files: list[str]) -> tuple[list[str], list[str], list
     return python_files, ansible_files, skipped
 
 
+def partition_existing_files(
+    clone_path: Path,
+    files: list[str],
+) -> tuple[list[str], list[str]]:
+    """Split changed paths into present-at-HEAD vs deleted/missing."""
+    present: list[str] = []
+    missing: list[str] = []
+    for rel in files:
+        if (clone_path / rel).is_file():
+            present.append(rel)
+        else:
+            missing.append(rel)
+    return present, missing
+
+
 def fetch_diff_patch(clone_path: Path, base_sha: str, head_sha: str) -> str:
     proc = run_cmd(
         ["git", "diff", f"{base_sha}..{head_sha}"],
@@ -142,9 +157,13 @@ def run_review(
     skipped_lint: list[str] = []
 
     if not skip_lint:
-        python_files, ansible_files, skipped_lint = classify_changed_files(
+        # Deleted paths still appear in the diff list but are gone at HEAD.
+        present, deleted = partition_existing_files(
+            clone_path,
             checkout.changed_files,
         )
+        python_files, ansible_files, skipped_lint = classify_changed_files(present)
+        skipped_lint = deleted + skipped_lint
 
         if python_files:
             py_paths = [clone_path / rel for rel in python_files]
@@ -320,10 +339,11 @@ def cli(
 ) -> None:
     """Run the review-changes workflow for a GitHub PR or GitLab MR.
 
-  REFERENCE is a PR/MR URL, or shorthand owner/repo#N / group/proj!N.
+    REFERENCE is a PR/MR URL, or shorthand owner/repo#N / group/proj!N.
 
-  Steps: clone-review → lint changed Python/Ansible files → optional cleanup.
-  Code-quality evaluation remains for the agent after linter output.
+    Steps: clone-review → lint changed Python/Ansible files present at HEAD
+    (deleted paths are skipped) → optional cleanup.
+    Code-quality evaluation remains for the agent after linter output.
     """
     try:
         report = run_review(

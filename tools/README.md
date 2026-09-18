@@ -419,7 +419,7 @@ workflow:
 
 1. ``clone-review`` — checkout under ``~/git/@REVIEWS``
 2. Lint changed ``*.py`` with ``check-python`` and Ansible ``*.yml``/``*.yaml``
-   with ``check-ansible``
+   with ``check-ansible`` (paths missing at HEAD — deleted files — are skipped)
 3. Optional ``cleanup-review`` when ``--cleanup`` is set
 
 Code-quality / docstring review is still for the agent after linter output.
