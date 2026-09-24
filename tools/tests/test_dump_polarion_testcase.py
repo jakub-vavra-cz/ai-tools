@@ -12,6 +12,7 @@ from ai_tools.dump_polarion_testcase import (
     fetch_testcase,
     format_key_value,
     format_hyperlinks,
+    format_teststeps_table,
     map_polarion_status_to_jira,
     ordered_items,
     polarion_pairs_to_jira,
@@ -28,6 +29,10 @@ class UnwrapTextValueTests(unittest.TestCase):
             "<p>hi</p>",
         )
 
+    def test_empty_rich_text_without_value(self) -> None:
+        self.assertEqual(unwrap_text_value({"type": "text/html"}), "")
+        self.assertEqual(unwrap_text_value({"type": "text/plain"}), "")
+
     def test_bool_and_none(self) -> None:
         self.assertEqual(unwrap_text_value(True), "true")
         self.assertEqual(unwrap_text_value(False), "false")
@@ -37,9 +42,7 @@ class UnwrapTextValueTests(unittest.TestCase):
 class HyperlinkFormatTests(unittest.TestCase):
     def test_formats_role_and_uri(self) -> None:
         self.assertEqual(
-            format_hyperlinks(
-                [{"role": "testscript", "uri": "https://example.com/a"}]
-            ),
+            format_hyperlinks([{"role": "testscript", "uri": "https://example.com/a"}]),
             "testscript|https://example.com/a",
         )
 
@@ -59,9 +62,7 @@ class HyperlinkFormatTests(unittest.TestCase):
 
     def test_primary_script_url_prefers_testscript(self) -> None:
         self.assertEqual(
-            primary_script_url(
-                "other|https://example.com/o,testscript|https://example.com/t"
-            ),
+            primary_script_url("other|https://example.com/o,testscript|https://example.com/t"),
             "https://example.com/t",
         )
 
@@ -97,9 +98,7 @@ class KeyValueFormatTests(unittest.TestCase):
                 "type": "testcase",
                 "setup": {"type": "text/html", "value": "<p/>"},
                 "casecomponent": "sssd",
-                "hyperlinks": [
-                    {"role": "testscript", "uri": "https://example.com/x"}
-                ],
+                "hyperlinks": [{"role": "testscript", "uri": "https://example.com/x"}],
             },
             project_id="RHEL_IDM",
             author="jvavra",
@@ -131,6 +130,45 @@ class KeyValueFormatTests(unittest.TestCase):
         )
         self.assertEqual(pairs["teststep.1.step"], "run")
         self.assertEqual(pairs["teststep.1.expectedResult"], "pass")
+
+    def test_teststeps_empty_result_becomes_empty_string(self) -> None:
+        pairs = teststeps_to_pairs(
+            [
+                {
+                    "type": "teststeps",
+                    "id": "CERT/CERT-1/1",
+                    "attributes": {
+                        "index": "1",
+                        "keys": ["step", "expectedResult"],
+                        "values": [
+                            {"type": "text/html", "value": "do thing"},
+                            {"type": "text/html"},
+                        ],
+                    },
+                }
+            ]
+        )
+        self.assertEqual(pairs["teststep.1.step"], "do thing")
+        self.assertEqual(pairs["teststep.1.expectedResult"], "")
+
+    def test_format_teststeps_table_uses_nbsp_for_empty_cells(self) -> None:
+        html = format_teststeps_table(
+            [
+                {
+                    "index": "1",
+                    "step": "do thing",
+                    "expectedResult": "",
+                },
+                {
+                    "index": "2",
+                    "step": '{"type":"text/html"}',
+                    "expectedResult": "ok",
+                },
+            ]
+        )
+        self.assertIn("<td>1</td><td>do thing</td><td>&nbsp;</td>", html)
+        self.assertIn("<td>2</td><td>&nbsp;</td><td>ok</td>", html)
+        self.assertNotIn('{"type":"text/html"}', html)
 
     def test_ordered_items_puts_teststeps_last(self) -> None:
         keys = [k for k, _ in ordered_items({"z": "1", "id": "x", "teststep.2.a": "y"})]
@@ -361,10 +399,7 @@ class JiraImportFormatTests(unittest.TestCase):
             {
                 "title": "t",
                 "tags": "tier1",
-                "description": (
-                    "<pre>Topology: ldap\n\n"
-                    ":customerscenario: True</pre>"
-                ),
+                "description": ("<pre>Topology: ldap\n\n:customerscenario: True</pre>"),
             },
             polarion_url="https://polarion.example.com",
         )

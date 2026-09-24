@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -100,6 +101,7 @@ JIRA_MAPPED_POLARION_KEYS = frozenset(
         "type",
         "status",
         "testCaseID",
+        "tmtid",
         "automation_script",
         "upstream",
         "created",
@@ -132,6 +134,10 @@ _EMPTY_HTML_RE = re.compile(
     r"^(?:\s|<p\s*/?>|</p>|&nbsp;|<br\s*/?>)*$",
     re.IGNORECASE,
 )
+# Polarion empty Text objects often serialize as only ``{"type":"text/html"}``.
+_EMPTY_RICHTEXT_JSON_RE = re.compile(
+    r'^\s*\{\s*"type"\s*:\s*"text/(?:html|plain)"\s*\}\s*$',
+)
 _PLACEHOLDER_VALUE_RE = re.compile(r"^-+$")
 # Polarion docstring blocks embedded in description, e.g.
 #   :title: ...\n:setup:\n    1. Start SSSD\n:steps:\n    ...
@@ -148,6 +154,8 @@ _TRUTHY_RE = re.compile(r"^(?:true|yes|1)$", re.IGNORECASE)
 
 def is_blank_rich_text(value: str) -> bool:
     if not value or not value.strip():
+        return True
+    if _EMPTY_RICHTEXT_JSON_RE.match(value.strip()):
         return True
     return bool(_EMPTY_HTML_RE.match(value))
 
@@ -400,8 +408,18 @@ def unwrap_text_value(value: Any) -> str:
     """Flatten Polarion rich-text ``{type, value}`` objects to their text."""
     if value is None:
         return ""
-    if isinstance(value, dict) and "value" in value:
-        return "" if value["value"] is None else str(value["value"])
+    if isinstance(value, dict):
+        if "value" in value:
+            return "" if value["value"] is None else str(value["value"])
+        # Empty Polarion Text: ``{"type":"text/html"}`` with no value key
+        # (common when step/result columns are mismatched or blank).
+        if set(value.keys()) <= {"type"} and value.get("type") in {
+            "text/html",
+            "text/plain",
+            None,
+        }:
+            return ""
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
@@ -433,10 +451,7 @@ def format_hyperlinks(value: Any) -> str:
 def escape_property_value(value: str) -> str:
     """Escape a value so each property fits on one line (Java-properties style)."""
     return (
-        value.replace("\\", "\\\\")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
+        value.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
     )
 
 
@@ -543,6 +558,7 @@ def map_polarion_status_to_jira(status: str) -> str | None:
     if not key:
         return None
     return POLARION_STATUS_TO_JIRA.get(key)
+
 
 def attributes_to_pairs(
     attributes: dict[str, Any],
@@ -717,33 +733,23 @@ def collect_teststeps(pairs: dict[str, str]) -> list[dict[str, str]]:
     def sort_key(index: str) -> tuple[int, str]:
         return (int(index), index) if index.isdigit() else (10**9, index)
 
-    return [
-        {"index": index, **by_index[index]}
-        for index in sorted(by_index, key=sort_key)
-    ]
+    return [{"index": index, **by_index[index]} for index in sorted(by_index, key=sort_key)]
 
 
 def _html_section(title: str, body: str) -> str:
     return f"<h2>{title}</h2>\n{body.strip()}\n"
 
 
-def _html_escape(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
-
-
 def _table_cell_html(value: str, *, header: bool = False) -> str:
     tag = "th" if header else "td"
     if is_blank_rich_text(value):
-        body = ""
+        # Empty ``<td></td>`` / Polarion ``{"type":"text/html"}`` cells break
+        # Jira ADF tables; keep a non-empty cell with ``&nbsp;``.
+        body = "" if header else "&nbsp;"
     elif "<" in value:
         body = value.strip()
     else:
-        body = _html_escape(value.strip())
+        body = html.escape(value.strip())
     return f"<{tag}>{body}</{tag}>"
 
 
@@ -764,16 +770,12 @@ def format_teststeps_table(steps: list[dict[str, str]]) -> str:
             for k, v in step.items()
             if k not in {"index", "step", "expectedResult"} and not is_blank_rich_text(v)
         }
-        if (
-            is_blank_rich_text(step_html)
-            and is_blank_rich_text(expected)
-            and not other
-        ):
+        if is_blank_rich_text(step_html) and is_blank_rich_text(expected) and not other:
             continue
         action = step_html.strip() if not is_blank_rich_text(step_html) else ""
         if other:
             extras = "\n".join(
-                f"<p><b>{_html_escape(key)}:</b></p>\n{value}"
+                f"<p><b>{html.escape(key)}:</b></p>\n{value}"
                 for key, value in sorted(other.items())
             )
             action = f"{action}\n{extras}".strip() if action else extras
@@ -789,9 +791,7 @@ def format_teststeps_table(steps: list[dict[str, str]]) -> str:
         return ""
     return (
         '<table border="1" cellpadding="4" cellspacing="0">\n'
-        "<tbody>\n"
-        + "\n".join(rows)
-        + "\n</tbody>\n</table>"
+        "<tbody>\n" + "\n".join(rows) + "\n</tbody>\n</table>"
     )
 
 
@@ -840,24 +840,18 @@ def build_jira_description(pairs: dict[str, str]) -> str:
         skip_meta = skip_meta | {"customerscenario", "customerScenario"}
     meta_rows: list[str] = []
     for key, value in ordered_items(pairs):
-        if (
-            key in skip_meta
-            or is_blank_rich_text(value)
-            or is_placeholder_meta_value(key, value)
-        ):
+        if key in skip_meta or is_blank_rich_text(value) or is_placeholder_meta_value(key, value):
             continue
         meta_rows.append(
             "<tr>"
-            f"<th>{_html_escape(key)}</th>"
-            f"<td>{value if '<' in value else _html_escape(value)}</td>"
+            f"<th>{html.escape(key)}</th>"
+            f"<td>{value if '<' in value else html.escape(value)}</td>"
             "</tr>"
         )
     if meta_rows:
         table = (
             '<table border="1" cellpadding="4" cellspacing="0">\n'
-            "<tbody>\n"
-            + "\n".join(meta_rows)
-            + "\n</tbody>\n</table>"
+            "<tbody>\n" + "\n".join(meta_rows) + "\n</tbody>\n</table>"
         )
         sections.append(_html_section("Polarion fields", table))
 
@@ -874,7 +868,8 @@ def polarion_pairs_to_jira(
     Clear mappings follow ``create-rheltest-testcase``:
     title→summary, assignee email (else author email)→assignee,
     casecomponent→components, tags→labels, subsystemteam→AssignedTeam,
-    testCaseID→ID, URL from automation_script when it is a valid http(s) URL
+    ID from testCaseID, else tmtid, else Polarion work-item id; URL from
+    automation_script when it is a valid http(s) URL
     else hyperlinks testscript, Polarion browse link→External issue URL,
     status→Jira status (draft/needsupdate/proposed→Draft, inactive→Retired,
     approved→Active). ``:customerscenario: True`` (or a Polarion
@@ -911,9 +906,9 @@ def polarion_pairs_to_jira(
     if team:
         jira["AssignedTeam"] = team
 
-    test_case_id = pairs.get("testCaseID", "").strip()
-    if test_case_id:
-        jira["ID"] = test_case_id
+    jira_id = pairs.get("testCaseID", "").strip() or pairs.get("tmtid", "").strip() or work_item_id
+    if jira_id:
+        jira["ID"] = jira_id
 
     url = resolve_jira_url(pairs)
     if url:
@@ -945,8 +940,7 @@ def fetch_testcase(
 ) -> dict[str, str]:
     """Fetch a work item (and optional test steps) and return key/value pairs."""
     wi_path = (
-        f"/projects/{encode_path_segment(project_id)}"
-        f"/workitems/{encode_path_segment(work_item_id)}"
+        f"/projects/{encode_path_segment(project_id)}/workitems/{encode_path_segment(work_item_id)}"
     )
     response = polarion_get(
         base_api_url,
@@ -975,9 +969,7 @@ def fetch_testcase(
 
     user_map = parse_included_user_map(response)
     author_ids = [short_id(x) for x in extract_relationship_ids(relationships, "author")]
-    assignee_ids = [
-        short_id(x) for x in extract_relationship_ids(relationships, "assignee")
-    ]
+    assignee_ids = [short_id(x) for x in extract_relationship_ids(relationships, "assignee")]
     if "id" not in attributes or not attributes["id"]:
         attributes = {**attributes, "id": work_item_id}
 

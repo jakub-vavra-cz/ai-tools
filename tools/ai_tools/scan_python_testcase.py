@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import ast
 import fnmatch
+import html
 import json
 import os
 import re
@@ -211,9 +212,7 @@ def _parse_parametrize(dec: ast.AST) -> ParametrizeMark | None:
                 return None
             rows.append((value,))
         else:
-            if not isinstance(elt, (ast.Tuple, ast.List)) or len(elt.elts) != len(
-                argnames
-            ):
+            if not isinstance(elt, (ast.Tuple, ast.List)) or len(elt.elts) != len(argnames):
                 return None
             row_vals: list[Any] = []
             for cell in elt.elts:
@@ -228,9 +227,7 @@ def _parse_parametrize(dec: ast.AST) -> ParametrizeMark | None:
         if kw.arg == "ids" and isinstance(kw.value, (ast.List, ast.Tuple)):
             parsed_ids: list[str] = []
             for id_node in kw.value.elts:
-                if not isinstance(id_node, ast.Constant) or not isinstance(
-                    id_node.value, str
-                ):
+                if not isinstance(id_node, ast.Constant) or not isinstance(id_node.value, str):
                     parsed_ids = []
                     break
                 parsed_ids.append(id_node.value)
@@ -674,15 +671,11 @@ def _field_spec(name: str, opts: Any, *, required: bool) -> PolarionFieldSpec:
         default=None if opts.get("default") is None else str(opts.get("default")),
         validate=None if opts.get("validate") is None else str(opts.get("validate")),
         transform_pattern=(
-            None
-            if transform.get("pattern") is None
-            else str(transform.get("pattern"))
+            None if transform.get("pattern") is None else str(transform.get("pattern"))
         ),
         transform_replace=str(transform.get("replace") or ""),
         transform_unless=(
-            None
-            if transform.get("unless") is None
-            else str(transform.get("unless"))
+            None if transform.get("unless") is None else str(transform.get("unless"))
         ),
         format=None if opts.get("format") is None else str(opts.get("format")),
         multiline=opts.get("multiline"),
@@ -787,30 +780,17 @@ def default_caseposneg(name: str) -> str:
     return "negative" if "negative" in name.lower() else "positive"
 
 
-def _html_escape_text(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
-
-
 def format_params_description(test: CollectedTest) -> str:
     """HTML block listing parametrized args / topology (pytest-output style)."""
     parts: list[str] = []
     if test.params:
         items = "".join(
-            f"<li><strong>{_html_escape_text(k)}</strong>: "
-            f"{_html_escape_text(v)}</li>"
+            f"<li><strong>{html.escape(k)}</strong>: {html.escape(v)}</li>"
             for k, v in test.params.items()
         )
-        parts.append(
-            "<div><strong>Parametrized arguments:</strong>"
-            f"<ul>{items}</ul></div>"
-        )
+        parts.append(f"<div><strong>Parametrized arguments:</strong><ul>{items}</ul></div>")
     if test.topology:
-        parts.append(f"<pre>Topology: {_html_escape_text(test.topology)}\n</pre>")
+        parts.append(f"<pre>Topology: {html.escape(test.topology)}\n</pre>")
     return "".join(parts)
 
 
@@ -844,9 +824,7 @@ def build_polarion_pairs(
     if "title" not in meta:
         meta["title"] = test.name
 
-    nodeid_id = (
-        f"{id_prefix.rstrip(':')}::{test.nodeid}" if id_prefix else test.nodeid
-    )
+    nodeid_id = f"{id_prefix.rstrip(':')}::{test.nodeid}" if id_prefix else test.nodeid
     defaults: dict[str, str] = {
         "caseautomation": "automated",
         "caseposneg": default_caseposneg(test.name),
@@ -859,9 +837,7 @@ def build_polarion_pairs(
         "id": nodeid_id,
     }
     if url:
-        defaults["automation_script"] = (
-            f"{url.rstrip('/')}/{test.location.file}#L{test.lineno}"
-        )
+        defaults["automation_script"] = f"{url.rstrip('/')}/{test.location.file}#L{test.lineno}"
     defaults.update({k: v for k, v in (overrides or {}).items() if v})
 
     pairs: dict[str, str] = {}
@@ -944,9 +920,7 @@ def build_polarion_pairs(
         pairs["title"] = meta.get("title", test.name)
 
     # Apply CLI title prefix only when yaml did not already transform title.
-    title_transformed = any(
-        s.name == "title" and s.transform_pattern for s in cfg.fields.values()
-    )
+    title_transformed = any(s.name == "title" and s.transform_pattern for s in cfg.fields.values())
     if title_prefix and not title_transformed:
         if not pairs["title"].startswith(title_prefix):
             pairs["title"] = f"{title_prefix}{pairs['title']}"
@@ -994,9 +968,7 @@ def build_polarion_pairs(
     param_desc = format_params_description(test)
     if param_desc:
         existing = pairs.get("description", "")
-        pairs["description"] = (
-            f"{param_desc}{existing}" if existing else param_desc
-        )
+        pairs["description"] = f"{param_desc}{existing}" if existing else param_desc
 
     return pairs
 

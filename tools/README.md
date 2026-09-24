@@ -23,6 +23,9 @@ pip install -e /path/to/ai-tools/tools
 | `check-ansible` | yamllint + multi-stack ansible syntax-check / ansible-lint (writing-ansible) |
 | `check-python` | Read-only Python lint/format checks (ruff, flake8, black, isort) |
 | `dump-polarion-testcase` | Fetch a Polarion testcase via REST API and dump it as `key=value` |
+| `dump-polarion-docs` | Dump Polarion project documents for Confluence migration |
+| `dump-polarion-requirements` | Dump Polarion requirements for Confluence migration |
+| `import-polarion-confluence` | Import Polarion dump into stage Confluence (IDMRHEL) |
 | `import-jira-testcase` | Import a jira-format dump into RHELTEST (match by ID, then summary) |
 | `scan-python-testcase` | Scan local Python tests (Betelgeuse-style) into jira-format dumps |
 | `beetlejuice` | Import Betelgeuse Polarion XML to Jira (`test-case`; `test-run` planned) |
@@ -159,6 +162,32 @@ check-python file.py --skip-ruff --skip-black
 
 Exit `0` when all non-skipped checks pass; `1` on lint failure; `2` on bad
 arguments / missing paths.
+
+### dump-polarion-docs / dump-polarion-requirements / import-polarion-confluence
+
+Migrate Polarion **documents** and **requirements** into stage Confluence
+(`IDMRHEL`). Skill: [migrate-polarion-confluence](../skills/migrate-polarion-confluence/SKILL.md).
+
+```bash
+export POLARION_TOKEN=…
+export CONFLUENCE_URL=https://stage-redhat.atlassian.net
+export CONFLUENCE_USERNAME=… CONFLUENCE_API_TOKEN=…
+
+cd ~/git/<project>-doc-migration
+dump-polarion-docs --project-id RHEL_IDM --out-dir polarion-dump
+dump-polarion-requirements --project-id RHEL_IDM --out-dir polarion-dump/requirements
+import-polarion-confluence \
+  --dump-dir polarion-dump \
+  --state-file polarion-dump/confluence-import.json \
+  --parent-id 454629179 \
+  --project-id RHEL_IDM \
+  --project-label "RHEL Identity Management" \
+  --skip-attachments
+```
+
+Parts API failures soft-dump from `homePageContent`. Testcase citations link to
+stage RHELTEST summary search. See the skill `reference.md` for flags and
+parent page ids (CERT / RHDS / RHEL_IDM).
 
 ### dump-polarion-testcase
 

@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import base64
 import gzip
+import html
 import json
+import logging
 import os
 import re
 import ssl
@@ -33,6 +35,8 @@ from urllib.parse import quote, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 import click
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -97,6 +101,7 @@ JIRA_MAPPED_POLARION_KEYS = frozenset(
         "type",
         "status",
         "testCaseID",
+        "tmtid",
         "automation_script",
         "upstream",
         "created",
@@ -141,6 +146,8 @@ _CUSTOMERSCENARIO_VALUE_RE = re.compile(
     r"(?i):customerscenario:[ \t]*([^\n<]*)",
 )
 _TRUTHY_RE = re.compile(r"^(?:true|yes|1)$", re.IGNORECASE)
+
+
 def is_blank_rich_text(value: str) -> bool:
     if not value or not value.strip():
         return True
@@ -260,15 +267,16 @@ def has_nonblank_teststep_field(pairs: dict[str, str], field: str) -> bool:
         if not is_blank_rich_text(value):
             return True
     return False
+
+
 def ca_bundle_from_env() -> str | None:
     return os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
+
+
 def escape_property_value(value: str) -> str:
     """Escape a value so each property fits on one line (Java-properties style)."""
     return (
-        value.replace("\\", "\\\\")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
+        value.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
     )
 
 
@@ -315,6 +323,8 @@ def parse_key_value_text(text: str) -> dict[str, str]:
 
 def parse_key_value_file(path: Path) -> dict[str, str]:
     return parse_key_value_text(path.read_text(encoding="utf-8"))
+
+
 def resolve_jira_assignee_email(pairs: dict[str, str]) -> str:
     """Prefer Polarion assignee email; fall back to author email."""
     assignee_email = pairs.get("assignee_email", "").strip()
@@ -337,6 +347,8 @@ def map_polarion_status_to_jira(status: str) -> str | None:
     if not key:
         return None
     return POLARION_STATUS_TO_JIRA.get(key)
+
+
 def ordered_items(pairs: dict[str, str]) -> list[tuple[str, str]]:
     """Order dump keys: standard first, then other attrs, then teststeps."""
     remaining = dict(pairs)
@@ -370,6 +382,8 @@ def format_key_value(
         items.extend(sorted(remaining.items(), key=lambda item: item[0]))
     lines = [f"{key}={escape_property_value(value)}" for key, value in items]
     return "\n".join(lines) + ("\n" if lines else "")
+
+
 def polarion_workitem_url(polarion_url: str, project_id: str, work_item_id: str) -> str:
     root = polarion_url.rstrip("/")
     return f"{root}/polarion/#/project/{project_id}/workitem?id={work_item_id}"
@@ -443,23 +457,11 @@ def collect_teststeps(pairs: dict[str, str]) -> list[dict[str, str]]:
     def sort_key(index: str) -> tuple[int, str]:
         return (int(index), index) if index.isdigit() else (10**9, index)
 
-    return [
-        {"index": index, **by_index[index]}
-        for index in sorted(by_index, key=sort_key)
-    ]
+    return [{"index": index, **by_index[index]} for index in sorted(by_index, key=sort_key)]
 
 
 def _html_section(title: str, body: str) -> str:
     return f"<h2>{title}</h2>\n{body.strip()}\n"
-
-
-def _html_escape(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
 
 
 def _table_cell_html(value: str, *, header: bool = False) -> str:
@@ -469,7 +471,7 @@ def _table_cell_html(value: str, *, header: bool = False) -> str:
     elif "<" in value:
         body = value.strip()
     else:
-        body = _html_escape(value.strip())
+        body = html.escape(value.strip())
     return f"<{tag}>{body}</{tag}>"
 
 
@@ -490,16 +492,12 @@ def format_teststeps_table(steps: list[dict[str, str]]) -> str:
             for k, v in step.items()
             if k not in {"index", "step", "expectedResult"} and not is_blank_rich_text(v)
         }
-        if (
-            is_blank_rich_text(step_html)
-            and is_blank_rich_text(expected)
-            and not other
-        ):
+        if is_blank_rich_text(step_html) and is_blank_rich_text(expected) and not other:
             continue
         action = step_html.strip() if not is_blank_rich_text(step_html) else ""
         if other:
             extras = "\n".join(
-                f"<p><b>{_html_escape(key)}:</b></p>\n{value}"
+                f"<p><b>{html.escape(key)}:</b></p>\n{value}"
                 for key, value in sorted(other.items())
             )
             action = f"{action}\n{extras}".strip() if action else extras
@@ -515,9 +513,7 @@ def format_teststeps_table(steps: list[dict[str, str]]) -> str:
         return ""
     return (
         '<table border="1" cellpadding="4" cellspacing="0">\n'
-        "<tbody>\n"
-        + "\n".join(rows)
-        + "\n</tbody>\n</table>"
+        "<tbody>\n" + "\n".join(rows) + "\n</tbody>\n</table>"
     )
 
 
@@ -566,24 +562,18 @@ def build_jira_description(pairs: dict[str, str]) -> str:
         skip_meta = skip_meta | {"customerscenario", "customerScenario"}
     meta_rows: list[str] = []
     for key, value in ordered_items(pairs):
-        if (
-            key in skip_meta
-            or is_blank_rich_text(value)
-            or is_placeholder_meta_value(key, value)
-        ):
+        if key in skip_meta or is_blank_rich_text(value) or is_placeholder_meta_value(key, value):
             continue
         meta_rows.append(
             "<tr>"
-            f"<th>{_html_escape(key)}</th>"
-            f"<td>{value if '<' in value else _html_escape(value)}</td>"
+            f"<th>{html.escape(key)}</th>"
+            f"<td>{value if '<' in value else html.escape(value)}</td>"
             "</tr>"
         )
     if meta_rows:
         table = (
             '<table border="1" cellpadding="4" cellspacing="0">\n'
-            "<tbody>\n"
-            + "\n".join(meta_rows)
-            + "\n</tbody>\n</table>"
+            "<tbody>\n" + "\n".join(meta_rows) + "\n</tbody>\n</table>"
         )
         sections.append(_html_section("Polarion fields", table))
 
@@ -600,7 +590,8 @@ def polarion_pairs_to_jira(
     Clear mappings follow ``create-rheltest-testcase``:
     title→summary, assignee email (else author email)→assignee,
     casecomponent→components, tags→labels, subsystemteam→AssignedTeam,
-    testCaseID→ID, URL from automation_script when it is a valid http(s) URL
+    ID from testCaseID, else tmtid, else Polarion work-item id; URL from
+    automation_script when it is a valid http(s) URL
     else hyperlinks testscript, Polarion browse link→External issue URL,
     status→Jira status (draft/needsupdate/proposed→Draft, inactive→Retired,
     approved→Active). ``:customerscenario: True`` (or a Polarion
@@ -637,9 +628,9 @@ def polarion_pairs_to_jira(
     if team:
         jira["AssignedTeam"] = team
 
-    test_case_id = pairs.get("testCaseID", "").strip()
-    if test_case_id:
-        jira["ID"] = test_case_id
+    jira_id = pairs.get("testCaseID", "").strip() or pairs.get("tmtid", "").strip() or work_item_id
+    if jira_id:
+        jira["ID"] = jira_id
 
     url = resolve_jira_url(pairs)
     if url:
@@ -658,6 +649,7 @@ def polarion_pairs_to_jira(
 
     return {k: v for k, v in jira.items() if v}
 
+
 # RHELTEST Test Case fields (create-rheltest-testcase skill / stage createmeta).
 FIELD_ID = "customfield_10591"
 FIELD_ASSIGNED_TEAM = "customfield_10606"
@@ -671,6 +663,7 @@ DEFAULT_PROJECT = "RHELTEST"
 DEFAULT_ISSUE_TYPE = "Test Case"
 DEFAULT_TESTRESULT_ISSUE_TYPE = "Test Result"
 DEFAULT_TEST_CASE_TYPE = "Test Case"
+RETIRED_STATUS_NAME = "Retired"
 FIELD_COMPOSE_VERSION = "customfield_11501"
 FIELD_COMPONENT_FIX_VERSION = "customfield_10742"
 
@@ -1292,6 +1285,64 @@ def search_issues(
     return issues if isinstance(issues, list) else []
 
 
+def issue_key_sort_key(issue_key: str) -> tuple[str, int]:
+    """Sort key so ``RHELTEST-97505`` comes before ``RHELTEST-98642``."""
+    key = (issue_key or "").strip()
+    if "-" in key:
+        prefix, _, suffix = key.rpartition("-")
+        if suffix.isdigit():
+            return (prefix, int(suffix))
+    return (key, 0)
+
+
+def issue_status_name(issue: dict[str, Any]) -> str:
+    fields = issue.get("fields") or {}
+    if not isinstance(fields, dict):
+        return ""
+    status = fields.get("status")
+    if isinstance(status, dict):
+        return str(status.get("name") or "").strip()
+    return str(status or "").strip()
+
+
+def is_retired_issue(issue: dict[str, Any]) -> bool:
+    return issue_status_name(issue).casefold() == RETIRED_STATUS_NAME.casefold()
+
+
+def pick_canonical_issue(
+    matches: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Prefer lowest non-retired Jira key; fall back to lowest key overall."""
+    usable = [
+        issue
+        for issue in matches
+        if isinstance(issue, dict) and str(issue.get("key") or "").strip()
+    ]
+    if not usable:
+        return None
+    active = [issue for issue in usable if not is_retired_issue(issue)]
+    pool = active if active else usable
+    chosen = min(
+        pool,
+        key=lambda issue: issue_key_sort_key(str(issue.get("key") or "")),
+    )
+    if len(usable) > 1:
+        ignored = sorted(
+            (
+                str(issue.get("key") or "")
+                for issue in usable
+                if str(issue.get("key") or "") != str(chosen.get("key") or "")
+            ),
+            key=issue_key_sort_key,
+        )
+        logger.info(
+            "duplicate Jira matches: chose %s, ignored %s",
+            chosen.get("key"),
+            ", ".join(ignored),
+        )
+    return chosen
+
+
 def find_by_work_item_id(
     config: JiraConfig,
     *,
@@ -1310,7 +1361,7 @@ def find_by_work_item_id(
     issues = search_issues(
         config,
         jql,
-        fields=["summary", FIELD_ID, "issuetype"],
+        fields=["summary", FIELD_ID, "issuetype", "status"],
         max_results=50,
     )
     exact: list[dict[str, Any]] = []
@@ -1343,7 +1394,7 @@ def find_by_summary(
     issues = search_issues(
         config,
         jql,
-        fields=["summary", FIELD_ID, "issuetype"],
+        fields=["summary", FIELD_ID, "issuetype", "status"],
         max_results=50,
     )
     exact: list[dict[str, Any]] = []
@@ -1480,6 +1531,8 @@ def resolve_match(
     Prefer ``customfield_10591`` (dump ``ID``). When ``ID`` is present, never
     fall back to summary — parametrized tests often share the same title.
     Summary matching is only used when ``ID`` is absent.
+
+    Duplicate matches: keep the lowest non-retired Jira key and ignore the rest.
     """
     work_item_id = dump.get("ID", "").strip()
     summary = dump.get("summary", "").strip()
@@ -1491,13 +1544,9 @@ def resolve_match(
             issue_type=issue_type,
             work_item_id=work_item_id,
         )
-        if len(matches) > 1:
-            keys = ", ".join(str(m.get("key")) for m in matches)
-            raise JiraError(
-                f"multiple Test Cases with ID={work_item_id!r}: {keys}",
-            )
-        if len(matches) == 1:
-            return str(matches[0].get("key")), "id"
+        chosen = pick_canonical_issue(matches)
+        if chosen is not None:
+            return str(chosen.get("key")), "id"
         return None, "none"
 
     if summary:
@@ -1507,13 +1556,9 @@ def resolve_match(
             issue_type=issue_type,
             summary=summary,
         )
-        if len(matches) > 1:
-            keys = ", ".join(str(m.get("key")) for m in matches)
-            raise JiraError(
-                f"multiple Test Cases with summary={summary!r}: {keys}",
-            )
-        if len(matches) == 1:
-            return str(matches[0].get("key")), "summary"
+        chosen = pick_canonical_issue(matches)
+        if chosen is not None:
+            return str(chosen.get("key")), "summary"
 
     return None, "none"
 
@@ -1649,9 +1694,10 @@ def find_parent_test_case(
         issue_type=DEFAULT_TEST_CASE_TYPE,
         work_item_id=test_case_id,
     )
-    if not matches:
+    chosen = pick_canonical_issue(matches)
+    if chosen is None:
         return None
-    key = matches[0].get("key")
+    key = chosen.get("key")
     return str(key) if key else None
 
 
@@ -2053,16 +2099,18 @@ def testcase_element_to_pairs(
         "title": title,
         "type": "testcase",
     }
+    if case_id:
+        pairs["id"] = case_id
     if description:
         pairs["description"] = description
     if status:
         pairs["status"] = status
 
-    # Lookup id → testCaseID (Jira customfield_10591 / dump ``ID``).
-    # Prefer an explicit custom-field; otherwise use ``@id``.
-    test_case_id = custom.pop("testCaseID", "").strip() or case_id
-    if test_case_id:
-        pairs["testCaseID"] = test_case_id
+    # ID resolution (testCaseID → tmtid → @id) happens in polarion_pairs_to_jira.
+    for key in ("testCaseID", "tmtid"):
+        value = custom.pop(key, "").strip()
+        if value:
+            pairs[key] = value
 
     for key, value in custom.items():
         if not value:

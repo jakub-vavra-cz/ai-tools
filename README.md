@@ -64,7 +64,7 @@ pip install -e /path/to/ai-tools/tools
 | `idmci-rerun-failed` | Re-run only failed pytest tests in an existing `@TESTRUNS` twd |
 | `decompress-logs` | Decompress gzip IdM-CI / Jenkins log artifacts (plain paths, `.gz`, misnamed `.gz`) |
 | `check-ansible` | yamllint + dual-stack ansible syntax-check / ansible-lint |
-| `dump-polarion-testcase` / `import-jira-testcase` / `scan-python-testcase` / `beetlejuice` | Polarion ↔ Jira RHELTEST Test Case helpers |
+| `dump-polarion-testcase` / `dump-polarion-docs` / `dump-polarion-requirements` / `import-polarion-confluence` / `import-jira-testcase` / `scan-python-testcase` / `beetlejuice` | Polarion ↔ Confluence / Jira RHELTEST helpers |
 | `is-merged` | Check whether a local tip is already on upstream |
 | `run-idm-jenkins` | Upload metadata as an sssd-qe snippet; print Jenkins `trigger_build` params; `--trigger` uses the Jenkins REST API |
 
@@ -74,6 +74,7 @@ See [tools/README.md](tools/README.md).
 
 | Skill | Purpose |
 |-------|---------|
+| `migrate-polarion-confluence` | Migrate Polarion docs/requirements to stage Confluence IDMRHEL (`dump-polarion-docs`, `dump-polarion-requirements`, `import-polarion-confluence`) |
 | `about-idmci` | Answer IdM-CI conceptual/how-to questions from docs-idmci (`~/git/idmcidoc-fork-main`, [docs-idmci](https://gitlab.cee.redhat.com/identity-management/docs-idmci)); topic map in `skills/about-idmci/reference.md` |
 | `agenda` | Daily work agenda from worklog, git-stats, and jira-cli MCP tools |
 | `analyze-jenkins-failure` | Debug IdM-CI Jenkins jobs (`jenkins-to-testrun`, `pull-jenkins-artifacts`, `decompress-logs`, reproduction) |
