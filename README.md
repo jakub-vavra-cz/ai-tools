@@ -83,6 +83,7 @@ pip install -e /path/to/ai-tools/tools
 | `check-ansible` | yamllint + dual-stack ansible syntax-check / ansible-lint |
 | `dump-polarion-testcase` / `dump-polarion-docs` / `dump-polarion-requirements` / `import-polarion-confluence` / `import-jira-testcase` / `scan-python-testcase` / `beetlejuice` | Polarion ↔ Confluence / Jira RHELTEST helpers |
 | `is-merged` | Check whether a local tip is already on upstream |
+| `gitlab-mr-comments` | Pull GitLab MR review comments via glab (numbered `@path:line` summary) |
 | `run-idm-jenkins` | Upload metadata as an sssd-qe snippet; print Jenkins `trigger_build` params; `--trigger` uses the Jenkins REST API |
 
 See [tools/README.md](tools/README.md).
@@ -97,6 +98,7 @@ See [tools/README.md](tools/README.md).
 | `analyze-jenkins-failure` | Debug IdM-CI Jenkins jobs (`jenkins-to-testrun`, `pull-jenkins-artifacts`, `decompress-logs`, reproduction) |
 | `backlog` | Backlog tickets for estimation and sprint planning via jira-cli MCP |
 | `is-merged` | Whether a local branch/worktree tip is already on upstream (`is-merged` CLI) |
+| `gitlab-mr-comments` | GitLab MR review comments via `gitlab-mr-comments` CLI (glab); auto-use for MR comment questions |
 | `linux-oob-troubleshoot` | Lab Linux OOB (telnet/socat + remote rsyslog) for IdM-CI SSH-death debugging; playbook under `skills/linux-oob-troubleshoot/playbooks/` |
 | `jira-cli-mcp` | Jira issue search, updates, and transitions via the jira-cli MCP (IDM/RHEL transition map in `skills/jira-cli-mcp/reference.md`) |
 | `review-changes` | Clone a PR/MR, lint changed files, and review diff quality |

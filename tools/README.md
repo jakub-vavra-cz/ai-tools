@@ -57,6 +57,7 @@ Or copy [`ai-tools.env.example`](../ai-tools.env.example) and fill real values.
 | `decompress-logs` | Decompress gzip IdM-CI / Jenkins log artifacts (incl. misnamed `.gz`) |
 | `bugzilla` | Query Bugzilla REST API (`get`, `search`, `config`) |
 | `oc-login-sso` | OpenShift login via Kerberos/SPNEGO SSO (no browser); DnO defaults |
+| `gitlab-mr-comments` | Pull GitLab MR review comments via glab; numbered `@path:line` summary |
 
 ### oc-login-sso
 
@@ -453,6 +454,34 @@ review-diff URL -o /tmp/pr189.patch
 | `--stat` | Diffstat summary only |
 | `-o` / `--output` | Write patch to a file |
 | `--json` | Machine-readable metadata (+ diff unless `--name-only`/`--stat`) |
+
+Exit `0` on success, `2` on error.
+
+### gitlab-mr-comments
+
+Pull GitLab MR overview + notes via ``glab`` and print a numbered summary with
+``@path:line`` locations for DiffNotes. Used by the
+[gitlab-mr-comments](../skills/gitlab-mr-comments/SKILL.md) skill. Prefer this
+over ad-hoc ``glab api`` / ``glab mr view --comments`` scraping.
+
+Requires ``glab`` on ``PATH`` and host auth.
+
+```bash
+gitlab-mr-comments 'https://gitlab.example.com/group/repo/-/merge_requests/183'
+gitlab-mr-comments 'group/repo!183' --host gitlab.example.com
+gitlab-mr-comments 'group/repo!183'   # host from $GITLAB_HOST / ai-tools.env
+gitlab-mr-comments URL --json
+gitlab-mr-comments URL --include-system
+gitlab-mr-comments URL --no-description
+```
+
+| Flag | Purpose |
+|------|---------|
+| `reference` | MR URL or `group/proj!N` |
+| `--host` / `$GITLAB_HOST` | GitLab host for shorthand (from `ai-tools.env`) |
+| `--include-system` | Keep system notes |
+| `--no-description` | Omit MR description from text output |
+| `--json` | Machine-readable report |
 
 Exit `0` on success, `2` on error.
 

@@ -37,6 +37,7 @@ artifact-grep = "ai_tools.artifact_grep:main"
 idmci-rerun-failed = "ai_tools.idmci_rerun_failed:main"
 bugzilla = "ai_tools.bugzilla:main"
 oc-login-sso = "ai_tools.oc_login_sso:main"
+gitlab-mr-comments = "ai_tools.gitlab_mr_comments:main"
 
 [project.optional-dependencies]
 polarion-yaml = ["PyYAML>=6"]

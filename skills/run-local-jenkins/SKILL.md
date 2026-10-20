@@ -116,7 +116,7 @@ Local Jenkins:
 - [ ] Firewall if --export-container-ports
 - [ ] Reset casc.yaml; local-develop.sh -f FORK -b JENKINSLIB_BRANCH
 - [ ] Push jenkinslib to origin/JENKINSLIB_BRANCH
-- [ ] Start local.sh in tmux; verify X-Jenkins + live library fork/branch
+- [ ] Start local.sh in tmux (log to /dev/null unless user asked for a file log); verify X-Jenkins + live library fork/branch
 - [ ] generate-idmci-jobs (disableJobs=true); confirm User-Tools
 - [ ] Optional: custom agent image + CasC tag / IDMCI_GITREPO params
 ```
@@ -215,6 +215,38 @@ cp ~/git/jenkins-fork-${JENKINS_BRANCH}/casc.yaml ./casc.yaml
 Run `local.sh` in **tmux** (or equivalent) so an SSH/VPN disconnect does not
 SIGHUP and stop the controller (`podman run --rm` dies with the session).
 
+### Logging (default: discard)
+
+`local.sh` / Jenkins console output is **noisy and can grow to tens of GB**.
+**Default: redirect to `/dev/null`.** Do **not** `tee` to a file under
+`$LOCAL_JENKINS` (or elsewhere) unless the user **explicitly** asks to keep a
+tmux/controller log (e.g. debugging a boot failure).
+
+```bash
+# Default — no file log (preferred)
+tmux new-session -d -s "jenkins-${CHANGE}" -c "$LOCAL_JENKINS" \
+  bash -lc '../jenkins-csb/self-service/local.sh \
+    --export-container-ports \
+    --local-user-password "'"$LOCAL_PASS"'" \
+    >/dev/null 2>&1; exec bash'
+# reattach if needed: tmux attach -t "jenkins-${CHANGE}"
+```
+
+Only when the user asks for a persistent log:
+
+```bash
+# Explicit file log — opt-in only; truncate/remove when done
+LOG="$LOCAL_JENKINS/jenkins-${CHANGE}-tmux.log"
+: > "$LOG"
+tmux new-session -d -s "jenkins-${CHANGE}" -c "$LOCAL_JENKINS" \
+  bash -lc '../jenkins-csb/self-service/local.sh \
+    --export-container-ports \
+    --local-user-password "'"$LOCAL_PASS"'" \
+    2>&1 | tee -a "'"$LOG"'"; exec bash'
+```
+
+Interactive (human) start without a file log:
+
 ```bash
 tmux new -s "jenkins-${CHANGE}"
 cd "$LOCAL_JENKINS"
@@ -228,6 +260,7 @@ cd "$LOCAL_JENKINS"
 - Engine: podman. Container: `jenkins-csb-local`.
 - First run builds `localhost/jenkins-csb-controller-local:<ver>` (slow).
 - Leave `local.sh` running in the tmux session; do not start it in a bare SSH shell.
+- Prefer `/dev/null` over any `*-tmux.log`; delete or truncate leftover logs if found.
 
 ### Log in
 
@@ -404,4 +437,6 @@ Do not put the API token in a string build parameter.
 - Commit `casc.yaml` after `local-develop.sh`.
 - Seed jobs while the controller still loads `idm-jenkins-libs@main` / wrong remote.
 - Push custom agent tags over team `:latest` / `:testing` without explicit ask.
+- **`tee` / append `local.sh` output to a file by default** — use `/dev/null`
+  unless the user explicitly asked for a tmux/controller log (disk fill risk).
 - Confuse this with [run-idm-jenkins](../run-idm-jenkins/SKILL.md) (remote trigger-test-suite).
