@@ -4,7 +4,7 @@ description: >-
   Runs SSSD and related multihost tests via IdM-CI: @TESTRUNS campaigns under
   ~/git/@TESTRUNS/<name>/twd, job metadata.yaml, and `te` (see run-te for CLI/phase
   flags). For provider: aws, requires
-  a valid Kerberos TGT and `aws-saml.py --region=us-east-1 --role 099686300931-poweruser
+  a valid Kerberos TGT and `aws-saml.py --region=us-east-2 --role 099686300931-poweruser
   --sessionduration 14400` before provision. Prefer `~/git/<fork>/...` paths in metadata
   for local WIP (no sync); `sync-twd-tests` only when metadata still points at init
   clones (`../sssd/...`). Uses `clean-twd` on test re-runs only,
@@ -224,7 +224,7 @@ mkdir -p ~/git/@TESTRUNS/<campaign>/twd
 # (init clones ../sssd, ../sssd-ci-containers can be ignored). Only use
 # sync-twd-tests when metadata still references ../sssd/... clone paths.
 # If metadata uses provider: aws — ensure valid Kerberos TGT, then:
-#   aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400
+#   aws-saml.py --region=us-east-2 --role 099686300931-poweruser --sessionduration 14400
 
 cd ~/git/@TESTRUNS/<campaign>/twd
 te --upto prep metadata.yaml         # provision: init → allocate cloud VMs → prep SUTs
@@ -277,7 +277,7 @@ When job metadata uses **`provider: aws`** (in `domains` / mrack config), provis
 2. **Assume the AWS role via SAML** — run:
 
 ```bash
-aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400
+aws-saml.py --region=us-east-2 --role 099686300931-poweruser --sessionduration 14400
 ```
 
 That writes short-lived AWS credentials (valid for the given session duration, here 4 hours). Re-run `aws-saml.py` if credentials expire mid-campaign.
@@ -584,7 +584,7 @@ For @TESTRUNS campaigns, ensure **`twd/AGENT-HANDOFF.md`** reflects the latest p
 
 ## Order of operations
 
-1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](${DOCS_IDMCI_URL}/user_docs/guide.html#_job_metadata_basics)). **Create or read `twd/AGENT-HANDOFF.md`** — if **Provisioned at** is older than ~8 hours, re-provision (`te --upto prep`) instead of debugging stale inventory. If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-1 --role 099686300931-poweruser --sessionduration 14400` before provision. Provision with `te --upto prep metadata.yaml` if hosts are not up; record provision date/time in the handoff. Diagnose prior runs with **`te-test-summary`**, then junit/logs; update failed tests in the handoff.
+1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](${DOCS_IDMCI_URL}/user_docs/guide.html#_job_metadata_basics)). **Create or read `twd/AGENT-HANDOFF.md`** — if **Provisioned at** is older than ~8 hours, re-provision (`te --upto prep`) instead of debugging stale inventory. If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-2 --role 099686300931-poweruser --sessionduration 14400` before provision. Provision with `te --upto prep metadata.yaml` if hosts are not up; record provision date/time in the handoff. Diagnose prior runs with **`te-test-summary`**, then junit/logs; update failed tests in the handoff.
 2. **Discover** other test entry points (in-repo, then CI).
 3. **Scope** to the user’s change or named test.
 4. **Prepare** — venv, build dir, AWS creds when needed, `te --upto prep` (cloud provision), or local containers as required.
