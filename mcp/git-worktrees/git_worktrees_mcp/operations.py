@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from git_worktrees_mcp.config import RepoConfig, git_base_path, resolve_fork_url
+
+# Topic branches like RHEL9.7_fixplan / RHEL10.0_testplan → merge-check vs upstream/RHEL9.7.
+_RHEL_TOPIC_BRANCH_RE = re.compile(r"^(RHEL\d+\.\d+)_.+")
 
 
 @dataclass
@@ -337,7 +341,34 @@ def _ref_exists(cwd: Path, ref: str) -> bool:
     return _run(cwd, ["git", "rev-parse", "--verify", "--quiet", ref]).ok
 
 
-def _resolve_upstream_ref(main_clone: Path, default_branch: str) -> str | None:
+def _rhel_line_from_branch(branch: str) -> str | None:
+    """Return ``RHELX.Y`` when *branch* is ``RHELX.Y_<topic>``."""
+    m = _RHEL_TOPIC_BRANCH_RE.match(branch)
+    return m.group(1) if m else None
+
+
+def _resolve_upstream_ref(
+    main_clone: Path,
+    default_branch: str,
+    *,
+    branch: str | None = None,
+) -> str | None:
+    """
+    Pick the upstream ref used for merge checks.
+
+    ``RHELX.Y_<something>`` topics use ``upstream/RHELX.Y`` (no fallback to
+    main/master). Other branches use ``upstream/<default_branch>`` then HEAD /
+    common names.
+    """
+    if branch is not None:
+        rhel_line = _rhel_line_from_branch(branch)
+        if rhel_line is not None:
+            candidate = f"upstream/{rhel_line}"
+            if _ref_exists(main_clone, candidate):
+                return candidate
+            # Missing line ref: do not fall back to default_branch.
+            return None
+
     candidate = f"upstream/{default_branch}"
     if _ref_exists(main_clone, candidate):
         return candidate
@@ -394,9 +425,10 @@ def cleanup_worktree(
     Remove a topic worktree and delete its branch on the fork when the work is
     already present upstream.
 
-    Stops if commits are not merged into ``upstream/<default_branch>`` (exact
-    ancestor or cherry-equivalent). Warns and stops on uncommitted changes
-    unless ``force`` is True (force does not skip the merge check).
+    Merge check uses ``upstream/RHELX.Y`` for branches named ``RHELX.Y_<topic>``,
+    otherwise ``upstream/<default_branch>`` (exact ancestor or cherry-equivalent).
+    Warns and stops on uncommitted changes unless ``force`` is True (force does
+    not skip the merge check).
     """
     base, main_clone = default_paths(cfg)
     branch = branch.strip()
@@ -488,12 +520,22 @@ def cleanup_worktree(
             "steps": steps,
         }
 
-    upstream_ref = _resolve_upstream_ref(main_clone, cfg.default_branch)
+    rhel_line = _rhel_line_from_branch(branch)
+    upstream_ref = _resolve_upstream_ref(
+        main_clone, cfg.default_branch, branch=branch
+    )
     if upstream_ref is None:
+        if rhel_line is not None:
+            err = (
+                f"Branch {branch!r} is a RHEL-line topic but "
+                f"upstream/{rhel_line} is missing after fetch; refusing cleanup"
+            )
+        else:
+            err = "No upstream/* ref found after fetch"
         return {
             "ok": False,
             "repo": repo_key,
-            "error": "No upstream/* ref found after fetch",
+            "error": err,
             "main_clone": str(main_clone),
             "branch": branch,
             "steps": steps,

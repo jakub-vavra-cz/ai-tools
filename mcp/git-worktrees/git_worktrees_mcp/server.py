@@ -34,7 +34,7 @@ def main() -> None:
         instructions=(
             "Create a new branch in a new git worktree from upstream, then push to origin (fork). "
             "Clean up a topic worktree only when its commits are already merged upstream "
-            "(worktree_cleanup; force skips dirty-tree check only). "
+            "(worktree_cleanup; RHELX.Y_* vs upstream/RHELX.Y; force skips dirty-tree check only). "
             f"Repos: {', '.join(keys_sorted)}. "
             "Env: GIT_PATH (default ~/git), GITLAB_CEE_USER, GITHUB_USER for fork URLs; "
             "GIT_WORKTREES_REPOS_INI to override repos.ini."
@@ -114,9 +114,11 @@ def main() -> None:
         Remove a topic worktree and delete ``branch`` on the fork when the work is
         already merged into upstream (exact ancestor or cherry-equivalent).
 
-        Fetches remotes first. Stops if not merged upstream. Warns and stops on
-        uncommitted changes unless ``force`` is true (force does not bypass the
-        merge check). Also deletes the local branch and prunes worktrees.
+        Fetches remotes first. ``RHELX.Y_<topic>`` branches are checked against
+        ``upstream/RHELX.Y``; other branches use the repo default upstream branch.
+        Stops if not merged. Warns and stops on uncommitted changes unless
+        ``force`` is true (force does not bypass the merge check). Also deletes
+        the local branch and prunes worktrees.
         """
         key = repo.strip().upper()
         cfg = reg.get(key)

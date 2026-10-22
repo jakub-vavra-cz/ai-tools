@@ -77,7 +77,7 @@ Restart the MCP client after changing env vars or `repos.ini`.
 | **`list_repos`** | Returns `git_path`, path to the active **`repos.ini`**, and per-repo metadata (default branch, clone directory name, worktree prefix, resolved main clone path). |
 | **`create_worktree_branch`** | `repo`, `new_branch`, optional `source_branch`. Ensures the main clone exists, fetches, adds the worktree from `upstream/<source>`, pushes the new branch to `origin`. Response includes per-step git output or structured errors. |
 | **`worktree_refresh`** | `repo`. Checkout default branch on the main clone, `git pull -r upstream`, force-push `origin`. |
-| **`worktree_cleanup`** | `repo`, `branch`, optional `force`. Fetches, verifies the topic branch is merged into upstream (exact or cherry-equivalent), then deletes `origin/<branch>`, removes the worktree, and deletes the local branch. Stops if not merged. Warns and stops on uncommitted changes unless `force=true` (force does **not** bypass the merge check). |
+| **`worktree_cleanup`** | `repo`, `branch`, optional `force`. Fetches, verifies the topic branch is merged into upstream (exact or cherry-equivalent), then deletes `origin/<branch>`, removes the worktree, and deletes the local branch. Branches named `RHELX.Y_<topic>` are checked against `upstream/RHELX.Y`; others use the repo default upstream branch. Stops if not merged. Warns and stops on uncommitted changes unless `force=true` (force does **not** bypass the merge check). |
 
 **Two-argument behaviour (create):** omit `source_branch` to branch off the repo’s configured **default** upstream branch (for example `master` or `main`).
 

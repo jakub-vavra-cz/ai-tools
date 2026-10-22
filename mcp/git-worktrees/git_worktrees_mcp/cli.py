@@ -144,11 +144,14 @@ def build_parser() -> argparse.ArgumentParser:
         "cleanup",
         help=(
             "Delete a merged topic worktree and its fork branch "
-            "(refuses if not merged upstream)"
+            "(refuses if not merged upstream; RHELX.Y_* → upstream/RHELX.Y)"
         ),
     )
     cleanup_p.add_argument("repo", help="Repo code (e.g. IDMCI, SSSD, FW)")
-    cleanup_p.add_argument("branch", help="Topic branch name (worktree suffix)")
+    cleanup_p.add_argument(
+        "branch",
+        help="Topic branch name (worktree suffix); RHELX.Y_* vs upstream/RHELX.Y",
+    )
     cleanup_p.add_argument(
         "--force",
         action="store_true",
