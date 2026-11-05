@@ -26,6 +26,7 @@ Related skills (read and follow; do not duplicate):
 - [jira-cli-mcp](../jira-cli-mcp/SKILL.md) — fetch ticket, apply `In Progress`
 - [create-idmci-metadata](../create-idmci-metadata/SKILL.md) — author `twd/metadata.yaml`
 - [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md) — campaign layout, `te`, AWS, teardown
+  - Run all `te` commands inside a tmux session named after the campaign; record it in `AGENT-HANDOFF.md`; kill it on teardown/cleanup.
 
 Do not invent Jira transition names or `te` flags; those skills are authoritative.
 

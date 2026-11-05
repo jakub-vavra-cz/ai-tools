@@ -140,6 +140,7 @@ Create it at campaign start (when writing `metadata.yaml` or before the first `t
 | **Progress** | Phases done (init, provision, prep, test runs) and current state (e.g. “82/92 passed”) |
 | **Failed tests** | Table or list of **FAILED** test names from `te-test-summary`, with one-line root cause and fix status (open / fixed / deferred) |
 | **Next steps** | Ordered list of what to do next (re-run, reprovision, fix code, etc.) |
+| **tmux session** | Session name (= campaign name), whether it is alive, and `tmux attach -t <campaign>`; update when created/killed |
 | **Commands** | Copy-paste `cd`, `te`, `clean-twd`, `idmci-rerun-failed` commands that work for this campaign |
 
 **After provision** — append or update **Provisioned at** with output of `date` (or ISO timestamp). Optionally snapshot host IPs from `config/pytest-mh.yaml`.
@@ -164,6 +165,11 @@ Last updated: YYYY-MM-DD HH:MM (local)
 ## Campaign goal
 
 <one paragraph>
+
+## tmux session
+
+- Name: `<campaign>` (same as campaign dir) — `tmux attach -t <campaign>`
+- State: not created | running `<command>` | idle | killed (YYYY-MM-DD HH:MM)
 
 ## Environment
 
@@ -356,13 +362,19 @@ cd ~/git/@TESTRUNS/<campaign>/twd
 te --phase teardown metadata.yaml
 ```
 
+Run it in the campaign tmux session. After it succeeds (or the campaign is abandoned), **remove the tmux session**: `tmux kill-session -t <campaign>` and mark it killed in `AGENT-HANDOFF.md`. Environment cleanup is not complete while the session exists.
+
 This runs the **teardown** phase only (typically `teardown/mrack-destroy.yaml` and related playbooks). Call it when tests are done or the campaign is abandoned — do not leave hosts running. Full `te metadata.yaml` runs teardown at the end automatically; use `--phase teardown` when you provisioned with `--upto prep` and ran tests separately.
+
+### Run `te` in tmux (required)
+
+Treat every `te` invocation (provision, prep, test, teardown, full job, `idmci-rerun-failed`) as a **long-running task**: run it inside a tmux session named after the **campaign** (details, launch/poll snippet, sentinel: [run-te](../run-te/SKILL.md#long-running-run-te-inside-tmux)). Create the session when the campaign is created (or on first `te`), record its name in `AGENT-HANDOFF.md` under **tmux session**, reuse it for the whole campaign, and tell the user `tmux attach -t <campaign>`. Poll with short calls; do not block on the whole phase.
 
 ### Run with idm-ci `te`
 
 Orchestration is **`te`** — see [run-te](../run-te/SKILL.md) for full CLI mapping (`--upto`, `--phase`, `--phases`), step types, twd outputs, and exit codes.
 
-Campaign commands (with `sync-twd-tests` / `clean-twd` where needed):
+Campaign commands (with `sync-twd-tests` / `clean-twd` where needed; run `te` lines inside the campaign tmux session):
 
 ```bash
 cd ~/git/@TESTRUNS/<campaign>/twd
@@ -584,7 +596,7 @@ For @TESTRUNS campaigns, ensure **`twd/AGENT-HANDOFF.md`** reflects the latest p
 
 ## Order of operations
 
-1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](${DOCS_IDMCI_URL}/user_docs/guide.html#_job_metadata_basics)). **Create or read `twd/AGENT-HANDOFF.md`** — if **Provisioned at** is older than ~8 hours, re-provision (`te --upto prep`) instead of debugging stale inventory. If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-2 --role 099686300931-poweruser --sessionduration 14400` before provision. Provision with `te --upto prep metadata.yaml` if hosts are not up; record provision date/time in the handoff. Diagnose prior runs with **`te-test-summary`**, then junit/logs; update failed tests in the handoff.
+1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](${DOCS_IDMCI_URL}/user_docs/guide.html#_job_metadata_basics)). **Create or read `twd/AGENT-HANDOFF.md`** — if **Provisioned at** is older than ~8 hours, re-provision (`te --upto prep`) instead of debugging stale inventory. If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-2 --role 099686300931-poweruser --sessionduration 14400` before provision. Create/reuse tmux session `<campaign>` and record it in the handoff. Provision with `te --upto prep metadata.yaml` (inside tmux) if hosts are not up; record provision date/time in the handoff. Diagnose prior runs with **`te-test-summary`**, then junit/logs; update failed tests in the handoff.
 2. **Discover** other test entry points (in-repo, then CI).
 3. **Scope** to the user’s change or named test.
 4. **Prepare** — venv, build dir, AWS creds when needed, `te --upto prep` (cloud provision), or local containers as required.
@@ -593,4 +605,4 @@ For @TESTRUNS campaigns, ensure **`twd/AGENT-HANDOFF.md`** reflects the latest p
 7. **Run** the narrowest relevant command (`te --phase test` for campaigns).
 8. **Diagnose** with **`te-test-summary --twd . --json`**; fix or report blockers; **update `AGENT-HANDOFF.md`** (failed tests, timeline, next steps).
 9. **Widen** scope only when appropriate.
-10. **Teardown** — `te --phase teardown metadata.yaml` when cloud hosts should be released; note teardown in the handoff.
+10. **Teardown** — `te --phase teardown metadata.yaml` when cloud hosts should be released; note teardown in the handoff, then `tmux kill-session -t <campaign>` and record it as killed.

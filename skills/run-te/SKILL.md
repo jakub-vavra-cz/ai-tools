@@ -82,11 +82,43 @@ options:
 
 ---
 
+## Long-running: run `te` inside tmux
+
+`te` phases (provision, prep, test, full job) run minutes to hours. **Always run `te` inside a tmux session**, never as a bare foreground Shell call — the user can then watch live (`tmux attach -t <campaign>`) and the run survives agent timeouts/disconnects.
+
+- **Session name = campaign name** (the `@TESTRUNS/<campaign>` directory name; replace `.` and `:` with `_`). One session per campaign; reuse it for every `te`, `clean-twd`, `idmci-rerun-failed` call.
+- Session cwd is the campaign `twd`.
+- Record the session name in `twd/AGENT-HANDOFF.md` (see [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md)).
+
+```bash
+S=<campaign>; TWD=~/git/@TESTRUNS/$S/twd
+
+# create once (skip if it exists)
+tmux has-session -t "$S" 2>/dev/null || tmux new-session -d -s "$S" -c "$TWD"
+
+# launch; the sentinel line carries the exit code
+tmux send-keys -t "$S" 'te --upto prep metadata.yaml; echo "TE_DONE rc=$?"' Enter
+
+# wait/poll (short Shell calls, e.g. every 60s)
+tmux capture-pane -t "$S" -p -S -200 | grep -E 'TE_DONE' || echo running
+tail -n 50 "$TWD/runner.log"
+```
+
+Rules:
+1. Do not send a new `te` while the previous one has no `TE_DONE` line yet.
+2. Judge success by `TE_DONE rc=0`, `pytest-run.rc`, and `te-test-summary` — not by pane text alone.
+3. Poll with short calls; do not block one Shell call for the whole phase.
+4. Only the user's explicit request skips tmux (`--dry-run` is fine without it).
+5. On cleanup (teardown / campaign abandoned / done), kill the session: `tmux kill-session -t "$S"`.
+
+---
+
 ## Typical LTE flow
 
 ```bash
 cd ~/git/@TESTRUNS/<campaign>/twd
 
+# (run each inside the campaign tmux session — see above)
 te --upto prep metadata.yaml      # init → provision → prep
 te --phase test metadata.yaml     # pytest-mh / pytests / restraint steps
 te --phase teardown metadata.yaml # mrack destroy when done
