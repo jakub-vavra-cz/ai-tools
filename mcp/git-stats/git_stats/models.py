@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+REVIEW_DONE_STATES = frozenset({"approved", "changes_requested", "commented", "reviewed"})
+
 
 @dataclass
 class QueueItem:
@@ -19,6 +21,16 @@ class QueueItem:
     iid: int | None = None
     work_in_progress: bool = False
     state: str | None = None
+    labels: list[str] = field(default_factory=list)
+    # My review state: pending, approved, changes_requested, commented, ...
+    my_review: str | None = None
+
+    @property
+    def my_review_done(self) -> bool | None:
+        """True once I submitted a verdict; None when state is unknown."""
+        if self.my_review is None:
+            return None
+        return self.my_review in REVIEW_DONE_STATES
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -27,7 +39,11 @@ class QueueItem:
             "url": self.url,
             "updated_at": self.updated_at,
             "draft": self.draft,
+            "labels": list(self.labels),
         }
+        if self.my_review is not None:
+            data["my_review"] = self.my_review
+            data["my_review_done"] = self.my_review_done
         if self.state is not None:
             data["state"] = self.state
         if self.repository is not None:

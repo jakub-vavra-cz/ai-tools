@@ -76,10 +76,12 @@ Use MCP server **`user-git-stats`**, tool **`git_stats_reviews`** (same as `git-
 
 ### Fetch review queue
 
-One call returns open GitHub PRs and GitLab MRs where you are a reviewer:
+One call returns open GitHub PRs and GitLab MRs where you are a reviewer, including ones you already reviewed so each row can show whether your review is done:
 
 ```json
-{}
+{
+  "include_reviewed": true
+}
 ```
 
 Defaults: both `github` and `gitlab`; `github_limit` 20; `gitlab_limit` 30; `gitlab_host` `${GITLAB_HOST}`; drafts excluded from GitLab `items` (listed under `drafts` instead).
@@ -93,6 +95,7 @@ Optional overrides:
 | `include_drafts` | `true` to merge GitLab drafts into `items` |
 | `dirs` | Limit repo-scan fallback to named `GIT_PATH` children |
 | `include_all` | `true` for closed/merged PRs/MRs |
+| `include_reviewed` | `true` (agenda default) adds open PRs/MRs where your review is already done; omit/`false` for the pending-only queue |
 
 Do **not** run `gh search prs` or `glab api` for this section — `git_stats_reviews` replaces them (with per-repo `gh`/`glab` fallbacks inside the tool).
 
@@ -100,8 +103,11 @@ Do **not** run `gh search prs` or `glab api` for this section — `git_stats_rev
 
 | Field | Use |
 |-------|-----|
-| `github.review_requested.items[]` | GitHub PRs — `ref`, `title`, `url`, `updated_at` |
-| `gitlab.review_requested.items[]` | GitLab MRs (non-draft) |
+| `github.review_requested.items[]` | GitHub PRs — `ref`, `title`, `url`, `updated_at`, `labels`, `my_review`, `my_review_done` |
+| `gitlab.review_requested.items[]` | GitLab MRs (non-draft), same fields |
+| `items[].labels` | Label names (may be empty) |
+| `items[].my_review` | `pending`, `approved`, `changes_requested`, `commented`, `reviewed`; absent when unknown (repo-scan/REST fallback) |
+| `items[].my_review_done` | `true` = you already submitted a verdict; `false` = still to do (incl. re-requested after a verdict) |
 | `gitlab.review_requested.drafts[]` | Draft/WIP MRs — mention separately when `items` is empty |
 | `github.ok`, `gitlab.ok` | Per-host success |
 | `github.error`, `gitlab.error` | Per-host failure message |
@@ -111,7 +117,7 @@ If top-level `ok: false`, report the `error` string and continue with Jira.
 
 ### Present in the report
 
-Split **GitHub** and **GitLab** subsections. Per item: `[ref](url) — title`. Say "None" when a host's `items` is empty. Mention GitLab `drafts` only when there are no non-draft MRs (or when the user asked for drafts).
+Split **GitHub** and **GitLab** subsections. Per item: `[ref](url) — title`, then ` — **review todo**` / ` — review done (<my_review>)` from `my_review_done` / `my_review` (omit the marker when `my_review` is absent), then labels as `` `label` `` tags when non-empty. Pending items come first (the tool already orders them). Say "None" when a host's `items` is empty. Mention GitLab `drafts` only when there are no non-draft MRs (or when the user asked for drafts).
 
 For a fuller queue (authored PRs with changes requested / no reviewer), use `git_stats` with all categories instead.
 
@@ -171,9 +177,10 @@ Use this structure:
 
 ## Reviews waiting on me
 ### GitHub
-- [owner/repo#N](url) — title
+- [owner/repo#N](url) — title — **review todo** `Tests` `no-backport`
+- [owner/repo#M](url) — title — review done (changes_requested) `Changes requested`
 ### GitLab
-- [group/project!N](url) — title
+- [group/project!N](url) — title — **review todo** `bug`
 
 ## Sprint: <sprint name> (<sprint id>) [<board_name>]
 ### In Progress

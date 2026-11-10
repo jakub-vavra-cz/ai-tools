@@ -24,11 +24,19 @@ class ClassifyFilesTests(unittest.TestCase):
             "src/foo.py",
             "src/ansible/roles/x/tasks/main.yml",
             ".github/workflows/ci.yml",
+            "vars/lib.groovy",
+            "jenkinsfile/Jenkinsfile",
+            "maintainer_docs/a.adoc",
         ]
-        py, ans, skip = classify_changed_files(files)
-        self.assertEqual(py, ["src/foo.py"])
-        self.assertEqual(ans, ["src/ansible/roles/x/tasks/main.yml"])
-        self.assertEqual(skip, ["readme.md", ".github/workflows/ci.yml"])
+        targets = classify_changed_files(files)
+        self.assertEqual(targets.python, ["src/foo.py"])
+        self.assertEqual(targets.ansible, ["src/ansible/roles/x/tasks/main.yml"])
+        self.assertEqual(
+            targets.groovy,
+            ["vars/lib.groovy", "jenkinsfile/Jenkinsfile"],
+        )
+        self.assertEqual(targets.adoc, ["maintainer_docs/a.adoc"])
+        self.assertEqual(targets.skipped, ["readme.md", ".github/workflows/ci.yml"])
 
     def test_ansible_path_heuristic(self) -> None:
         self.assertTrue(is_ansible_yaml_path("roles/ldap/tasks/main.yml"))
@@ -184,6 +192,79 @@ class RunReviewTests(unittest.TestCase):
             self.assertEqual(report.python.paths, ["kept.py"])
             self.assertIn("deleted.py", report.skipped_lint)
             self.assertTrue(report.ok)
+
+
+class RunReviewGroovyAdocTests(unittest.TestCase):
+    def _checkout(self, clone: Path, files: list[str]) -> ReviewCheckout:
+        return ReviewCheckout(
+            platform="gitlab",
+            host="gitlab.example.com",
+            repo="grp/demo",
+            number=3,
+            kind="mr",
+            clone_path=str(clone),
+            created=True,
+            target_branch="main",
+            base_ref="origin/main",
+            base_sha="abc",
+            head_sha="def",
+            head_ref="topic",
+            changed_files=files,
+            diff_stat="x",
+        )
+
+    def test_groovy_and_adoc_gates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "@REVIEWS"
+            clone = root / "demo-mr3"
+            (clone / "vars").mkdir(parents=True)
+            (clone / "maintainer_docs").mkdir()
+            (clone / "macros").mkdir()
+            (clone / "vars" / "x.groovy").write_text("def a = 1\n", encoding="utf-8")
+            (clone / "maintainer_docs" / "p.adoc").write_text("= T\n", encoding="utf-8")
+            (clone / "macros" / "source-url.rb").write_text("", encoding="utf-8")
+            (clone / "Makefile").write_text(
+                "all:\nuser_docs:\nmaintainer_docs:\n",
+                encoding="utf-8",
+            )
+            checkout = self._checkout(
+                clone,
+                ["vars/x.groovy", "maintainer_docs/p.adoc", "gone.groovy"],
+            )
+
+            def fake_which(name: str) -> str | None:
+                return f"/usr/bin/{name}"
+
+            with patch("ai_tools.review_pr.prepare_review", return_value=checkout):
+                with patch("ai_tools.check_groovy.which", side_effect=fake_which):
+                    with patch("ai_tools.check_adoc.which", side_effect=fake_which):
+                        with patch("subprocess.run") as run:
+                            run.return_value.returncode = 0
+                            run.return_value.stdout = "ok\n"
+                            run.return_value.stderr = ""
+                            report = run_review("grp/demo!3", reviews_root=root)
+
+            self.assertIsNotNone(report.groovy)
+            self.assertEqual(report.groovy.paths, ["vars/x.groovy"])
+            self.assertIsNotNone(report.adoc)
+            self.assertEqual(report.adoc.target, "maintainer_docs")
+            self.assertIn("gone.groovy", report.skipped_lint)
+            self.assertTrue(report.ok)
+            text = format_report(report)
+            self.assertIn("=== groovy ===", text)
+            self.assertIn("=== adoc ===", text)
+
+    def test_adoc_without_docs_root_is_skipped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "@REVIEWS"
+            clone = root / "demo-mr3"
+            clone.mkdir(parents=True)
+            (clone / "a.adoc").write_text("= T\n", encoding="utf-8")
+            checkout = self._checkout(clone, ["a.adoc"])
+            with patch("ai_tools.review_pr.prepare_review", return_value=checkout):
+                report = run_review("grp/demo!3", reviews_root=root)
+            self.assertIsNone(report.adoc)
+            self.assertIn("a.adoc", report.skipped_lint)
 
 
 if __name__ == "__main__":

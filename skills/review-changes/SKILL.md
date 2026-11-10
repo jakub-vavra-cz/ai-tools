@@ -5,12 +5,15 @@ description: >-
   ~/git/@REVIEWS/ (path must include the literal substring reviews), computes the
   changed file set against the default branch, runs project-appropriate linters in
   read-only mode, then evaluates the diff for unclear docstrings and general code
-  quality. Prefer `review-pr` for the full mechanical workflow, or
-  `clone-review` / `review-diff` / `check-python` / `check-ansible` /
-  `cleanup-review` individually. Use when reviewing pull requests or merge
-  requests, when the user mentions review-changes, gh, glab, review-pr,
-  clone-review, review-diff, check-python, cleanup-review, or wants lint plus a
-  concise quality pass on remote branch changes without an existing checkout.
+  quality. Covers Python, Ansible, Groovy/Jenkinsfile (npm-groovy-lint) and
+  AsciiDoc (docs-idmci Makefile build). Prefer `review-pr` for the full
+  mechanical workflow; or use `clone-review` / `review-diff` / `check-python` /
+  `check-ansible` / `check-groovy` / `check-adoc` / `cleanup-review`
+  individually. Use when reviewing pull
+  requests or merge requests, when the user mentions review-changes, gh, glab,
+  review-pr, clone-review, review-diff, check-python, cleanup-review, groovy
+  lint, Jenkinsfile, adoc, or wants lint plus a concise quality pass on remote
+  branch changes without an existing checkout.
 ---
 
 # Review-changes (PR/MR clone and linters)
@@ -24,11 +27,11 @@ Do not invent or hardcode internal hostnames in commands or tracked files.
 
 ## When this applies
 
-User wants to **review** a PR/MR or branch they do not already have checked out, and to **run linters** on only what changed. This skill is **read-only** for the remote code (report results; do not reformat unless the user asks).
+User wants to **review** a PR/MR or branch they do not already have checked out, and to **run linters** on only what changed. This skill is **read-only** for the remote code (report results; do not reformat or auto-fix unless the user asks — never pass `--fix` to linters).
 
 **Never post comments, reviews, approvals, or requests-for-changes on the PR/MR autonomously.** Report findings only in the chat. Leave GitHub/GitLab review actions to the user unless they explicitly ask you to submit a review or comment.
 
-If you **edit** Python in a workspace after review, use the project skill [run-python-static-analysis](../run-python-static-analysis/SKILL.md) for lint and format rules on your own changes.
+If you **edit** code in a workspace after review, use the matching authoring skill for lint and format rules on your own changes: [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md), [writing-ansible](../writing-ansible/SKILL.md), [writing-adoc](../writing-adoc/SKILL.md).
 
 All commands below come from [ai-tools/tools](../../tools/README.md). Install
 once with `pip install -e ~/git/ai-tools/tools`. **Never use raw `cd <clone> && git diff …` or ad-hoc `gh` / `glab` / `git` sequences** — the ai-tools CLIs handle clone management, merge-base computation, diff, lint discovery, and cleanup in a safe, consistent way.
@@ -39,7 +42,8 @@ once with `pip install -e ~/git/ai-tools/tools`. **Never use raw `cd <clone> && 
 
 A single command clones the PR/MR under `~/git/@REVIEWS`, discovers changed
 files, and runs project-appropriate linters (Python via `check-python`, Ansible
-via `check-ansible`):
+via `check-ansible`, Groovy/Jenkinsfile via `check-groovy`, AsciiDoc via
+`check-adoc`):
 
 ```bash
 review-pr https://github.com/OWNER/REPO/pull/N --json -q
@@ -58,7 +62,8 @@ lists). The JSON result contains everything needed for the rest of the review:
 | `checkout.changed_files` | Lint scope and review scope |
 | `diff_stat` | Short summary for the report |
 | `lint_ok` | Overall lint pass/fail |
-| `python.ok` / `python.results[]` | Per-tool lint details |
+| `python.ok` / `python.results[]` | Per-tool lint details (also `ansible`, `groovy`, `adoc` when those files changed) |
+| `skipped_lint` | Deleted or unlintable paths |
 
 | Flag | Purpose |
 |------|---------|
@@ -81,8 +86,46 @@ need a different lint scope):
 | `clone-review REFERENCE --json` | Clone / refresh checkout; list changed files |
 | `check-python path.py --root <clone_path> --json` | Lint specific Python files |
 | `check-ansible path.yml --json` | Lint specific Ansible files |
+| `check-groovy path.groovy --root <clone_path> --json` | Lint Groovy / Jenkinsfile (section 1b) |
+| `check-adoc path.adoc --root <clone_path> --json` | AsciiDoc build gate (section 1b) |
 | `review-diff REFERENCE` | Print the patch (see section 2) |
 | `cleanup-review REFERENCE` | Remove the clone (see section 4) |
+
+---
+
+## 1b. Groovy and AsciiDoc gates (included in `review-pr`)
+
+`review-pr` also routes changed files to two more linters; their results appear
+in the JSON as `groovy` / `adoc` (same shape as `python`: `ok`, `results[]`) and
+count toward `lint_ok`:
+
+| Changed files | CLI | Gate |
+|---------------|-----|------|
+| `*.groovy`, `*.gvy`, `*.gradle`, `Jenkinsfile*` | `check-groovy` | `npm-groovy-lint` with the repo's `.groovylintrc.json` (host, else podman `node:22-bookworm` + JRE); same flags as the repo CI `groovylint_check` |
+| `*.adoc` in a docs-idmci tree | `check-adoc` | scoped `make maintainer_docs` / `user_docs` / `all`; fails on non-zero exit or any asciidoctor `WARNING:` / `missing attribute` ([writing-adoc](../writing-adoc/SKILL.md) gate) |
+
+Notes for the report:
+
+- A gate reported `[SKIP]` (no `npm-groovy-lint`/podman, or no `asciidoctor`/podman)
+  did **not** run — say so; do not call it a pass.
+- `.adoc` files outside a docs-idmci tree (no `Makefile` + `macros/source-url.rb`)
+  are listed in `skipped_lint`.
+- The AsciiDoc build writes `html/` into the review clone (removed by
+  `cleanup-review`). Both gates are read-only for sources; never add `--fix`.
+- Groovy: errors are must-fix, warnings should-fix, info nit. AsciiDoc typical
+  must-fix: unescaped literal braces (`\{name}`), missing index entry / owner
+  header on new pages, bare `link:` for internal refs. Also review the AsciiDoc
+  content against the `writing-adoc` authoring rules.
+- The Groovy gate lint takes ~30-60 s in the container (JRE + npm install).
+- Not run: `gradle-check` / Gradle tests (need the wrapper and network) — mention
+  if the diff touches `src/`, `vars/` or `tests/` in a jenkins-libs repo.
+
+Run a gate alone (e.g. after the author pushes a fix):
+
+```bash
+check-groovy vars/foo.groovy jenkinsfile/Jenkinsfile --root "$CLONE_PATH" -q
+check-adoc maintainer_docs/designs/foo.adoc --root "$CLONE_PATH" -q
+```
 
 ---
 
@@ -125,8 +168,11 @@ Read the patch via **`review-diff REFERENCE`** and full changed files from
 
 **General code quality**
 
-- **Correctness:** edge cases, error paths, resource cleanup, concurrency, security-sensitive use of input.
-- **Structure:** clear naming, reasonable function size, duplication, layering leaks.
+- **Correctness:** edge cases, error paths, resource cleanup, concurrency, security-sensitive use of input, fixing the root cause instead of workarounds.
+- **Structure:** clear naming, reasonable function size, duplication, layering leaks, avoid functions doing many unrelated things.
+- **Scalability:** wrong results for concurrent access (Time-of-Check to Time-of-Use race), processing in O(n^2) or worse for input.
+- **Resilience:** how will the code behave under IO/memory pressure and network load.
+- **Speed:** avoid O(n^2) or O(n^3) algorithms, repeated work, and unnecessary allocations, prevent long sleeps in favour of looped polling, but keep looped code lean.
 - **Tests:** if behavior changed, tests or types should reflect it; note gaps.
 - **Compatibility:** API/ABI/config migrations if the diff touches interfaces.
 
@@ -136,7 +182,7 @@ Classify findings (e.g. must-fix / should-fix / nit) and tie each to a file or h
 
 ## 4. Report and cleanup
 
-Summarize: `clone_path`, `base_ref` / SHAs, changed files, **linter** pass/fail (from `review-pr` JSON), then **quality/docstring** findings from section 3 (or state none worth noting).
+Summarize: `clone_path`, `base_ref` / SHAs, changed files, **linter** pass/fail (from `review-pr` JSON, including `groovy` / `adoc` gates), then **quality/docstring** findings from section 3 (or state none worth noting).
 
 **Cleanup** when finished:
 
@@ -164,3 +210,5 @@ git diff --stat "$BASE"..HEAD
 
 - Lint Python: `flake8`, `black --check`, `ruff check` per [run-python-static-code-analysis](../run-python-static-code-analysis/SKILL.md).
 - Lint Ansible: per [writing-ansible](../writing-ansible/SKILL.md).
+- Lint Groovy/Jenkinsfile: `npm-groovy-lint --output txt --files <changed>` from the repo root (needs Node + JRE; or a `docker.io/library/node:22-bookworm` container with `default-jre-headless`).
+- Build AsciiDoc: `make <user_docs|maintainer_docs|all>` per [writing-adoc](../writing-adoc/SKILL.md).

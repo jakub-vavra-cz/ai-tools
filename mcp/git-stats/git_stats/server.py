@@ -44,8 +44,14 @@ def main() -> None:
         gitlab_host: str = config.default_gitlab_host(),
         dirs: list[str] | None = None,
         include_all: bool = config.default_include_all(),
+        include_reviewed: bool = False,
     ) -> dict[str, Any]:
-        """Fetch PR/MR queues on GitHub and GitLab."""
+        """Fetch PR/MR queues on GitHub and GitLab.
+
+        Items carry `labels`; review_requested items also carry `my_review`
+        (pending/approved/changes_requested/commented/reviewed) and `my_review_done`.
+        `include_reviewed` adds open PRs/MRs I already reviewed to review_requested.
+        """
         return queue_fetch(
             categories=categories,
             hosts=hosts,
@@ -55,6 +61,7 @@ def main() -> None:
             gitlab_host=gitlab_host,
             dirs=dirs,
             include_all=include_all,
+            include_reviewed=include_reviewed,
         )
 
     @mcp.tool()
@@ -66,8 +73,14 @@ def main() -> None:
         gitlab_host: str = config.default_gitlab_host(),
         dirs: list[str] | None = None,
         include_all: bool = config.default_include_all(),
+        include_reviewed: bool = False,
     ) -> dict[str, Any]:
-        """Fetch review-requested PR/MR queues only (agenda section 2)."""
+        """Fetch review-requested PR/MR queues only (agenda section 2).
+
+        Items carry `labels`, `my_review` (pending/approved/changes_requested/
+        commented/reviewed) and `my_review_done`. Set `include_reviewed` to also
+        list open PRs/MRs where my review is already done (pending ones come first).
+        """
         return review_queue(
             hosts=hosts,
             github_limit=github_limit,
@@ -76,6 +89,7 @@ def main() -> None:
             gitlab_host=gitlab_host,
             dirs=dirs,
             include_all=include_all,
+            include_reviewed=include_reviewed,
         )
 
     @mcp.tool()

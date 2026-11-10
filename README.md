@@ -81,6 +81,8 @@ pip install -e /path/to/ai-tools/tools
 | `idmci-rerun-failed` | Re-run only failed pytest tests in an existing `@TESTRUNS` twd |
 | `decompress-logs` | Decompress gzip IdM-CI / Jenkins log artifacts (plain paths, `.gz`, misnamed `.gz`) |
 | `check-ansible` | yamllint + dual-stack ansible syntax-check / ansible-lint |
+| `check-groovy` | npm-groovy-lint on Groovy / Jenkinsfile (host or podman) |
+| `check-adoc` | docs-idmci AsciiDoc build gate (scoped make, no warnings) |
 | `dump-polarion-testcase` / `dump-polarion-docs` / `dump-polarion-requirements` / `import-polarion-confluence` / `import-jira-testcase` / `scan-python-testcase` / `beetlejuice` | Polarion ↔ Confluence / Jira RHELTEST helpers |
 | `is-merged` | Check whether a local tip is already on upstream |
 | `gitlab-mr-comments` | Pull GitLab MR review comments via glab (numbered `@path:line` summary) |

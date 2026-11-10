@@ -169,6 +169,7 @@ When `github` or `gitlab` is given, fetch only that host; otherwise fetch both i
 | `--github-limit N` | `GIT_STATS_GITHUB_LIMIT` | `20` | Max GitHub PRs **per category** |
 | `--gitlab-limit N` | `GIT_STATS_GITLAB_LIMIT` | `30` | Max GitLab MRs **per category** |
 | `--include-drafts` | `GIT_STATS_INCLUDE_DRAFTS` | off | Include GitLab drafts/WIP in `review_requested` lists |
+| `--include-reviewed` | — | off | Also list open PRs/MRs where my review is already done (`review_requested`); pending ones sort first |
 | `--gitlab-host HOST` | `GIT_STATS_GITLAB_HOST` | `${GITLAB_HOST}` | `glab --hostname` for cross-project API |
 | `--dir NAME` | — | all under `GIT_PATH` | Limit per-repo fallback to a top-level directory name (repeatable) |
 | `--json` | — | off | Emit the MCP response dict on stdout |
@@ -254,6 +255,7 @@ mcp.run(transport="stdio")
 | `github_limit` | `integer` | `20` | `--github-limit` (per category) |
 | `gitlab_limit` | `integer` | `30` | `--gitlab-limit` (per category) |
 | `include_drafts` | `boolean` | `false` | `--include-drafts` |
+| `include_reviewed` | `boolean` | `false` | `--include-reviewed` |
 | `gitlab_host` | `string` | `${GITLAB_HOST}` | `--gitlab-host` |
 | `dirs` | `list[string]` | `[]` | repeatable `--dir` (empty → all clones under `GIT_PATH`) |
 
@@ -372,6 +374,9 @@ Omitted category keys: when a category was not requested, omit its key under eac
 | `*.<category>.items` | Matching entries, sorted by `updated_at` desc. |
 | `gitlab.review_requested.drafts` | Draft/WIP MRs excluded from `items` unless `include_drafts`. |
 | `*.items[].ref` | Short id: `owner/repo#N` or `group/project!N`. |
+| `*.items[].labels` | Label names on the PR/MR (`[]` when none). |
+| `*.items[].my_review` | `review_requested` only: my state — `pending`, `approved`, `changes_requested`, `commented`, `reviewed`; omitted when unknown (repo-scan/REST fallback). |
+| `*.items[].my_review_done` | `true` once I submitted a verdict (`approved`/`changes_requested`/`commented`/`reviewed`); `false` for `pending` (incl. re-requested). Without `include_reviewed` only pending items appear. |
 | `errors` | Top-level non-fatal issues, e.g. `[{"host": "github", "category": "authored_no_reviewer", "message": "..."}]`. |
 
 #### Category labels

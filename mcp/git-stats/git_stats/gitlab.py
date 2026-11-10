@@ -10,12 +10,14 @@ from urllib.parse import urlencode
 from git_stats.cli_util import run_cmd, run_json_cmd, which
 from git_stats.models import CategoryResult, QueueItem
 
+# %(review_state)s is "reviewState: UNREVIEWED" for the pending-only queue, empty otherwise.
 _GQL_REVIEW_REQUESTED = """
 query($state: MergeRequestState, $first: Int!) {
   currentUser {
+    username
     reviewRequestedMergeRequests(
       state: $state
-      reviewState: UNREVIEWED
+      %(review_state)s
       first: $first
     ) {
       nodes {
@@ -26,11 +28,28 @@ query($state: MergeRequestState, $first: Int!) {
         draft
         state
         project { fullPath }
+        labels { nodes { title } }
+        reviewers {
+          nodes {
+            username
+            mergeRequestInteraction { reviewState approved }
+          }
+        }
       }
     }
   }
 }
 """
+
+# GitLab reviewState -> my_review; REVIEW_STARTED/UNAPPROVED are not a verdict yet.
+_REVIEW_STATES = {
+    "UNREVIEWED": "pending",
+    "REVIEW_STARTED": "pending",
+    "UNAPPROVED": "pending",
+    "REVIEWED": "reviewed",
+    "APPROVED": "approved",
+    "REQUESTED_CHANGES": "changes_requested",
+}
 
 
 def _glab_api(path: str, *, hostname: str) -> tuple[list[dict[str, Any]] | None, str | None]:
@@ -62,7 +81,38 @@ def _resolve_username(hostname: str) -> tuple[str | None, str | None]:
     return (str(username) if username else None), None
 
 
-def _item_from_mr(raw: dict[str, Any]) -> QueueItem:
+def _labels_from(raw: dict[str, Any]) -> list[str]:
+    """Label titles from GraphQL nodes or REST/glab string (or dict) lists."""
+    labels = raw.get("labels")
+    if isinstance(labels, dict):
+        labels = labels.get("nodes")
+    if not isinstance(labels, list):
+        return []
+    names: list[str] = []
+    for label in labels:
+        name = (label.get("title") or label.get("name")) if isinstance(label, dict) else label
+        if name:
+            names.append(str(name))
+    return names
+
+
+def _my_review_state(raw: dict[str, Any], username: str | None) -> str | None:
+    """My reviewState from GraphQL reviewers, or a pre-computed fallback value."""
+    precomputed = raw.get("_my_review")
+    if precomputed:
+        return str(precomputed)
+    reviewers = raw.get("reviewers")
+    if not username or not isinstance(reviewers, dict):
+        return None
+    for reviewer in reviewers.get("nodes") or []:
+        if str((reviewer or {}).get("username") or "").lower() != username.lower():
+            continue
+        interaction = reviewer.get("mergeRequestInteraction") or {}
+        return _REVIEW_STATES.get(str(interaction.get("reviewState") or "").upper(), "pending")
+    return None
+
+
+def _item_from_mr(raw: dict[str, Any], *, username: str | None = None) -> QueueItem:
     refs = raw.get("references") or {}
     ref = str(refs.get("full") or "")
     project = raw.get("project") or {}
@@ -86,11 +136,20 @@ def _item_from_mr(raw: dict[str, Any]) -> QueueItem:
         project=path_with_namespace or None,
         iid=int(raw["iid"]) if raw.get("iid") is not None else None,
         state=str(state).lower() if state else None,
+        labels=_labels_from(raw),
+        my_review=_my_review_state(raw, username),
     )
 
 
 def _sort_items(items: list[QueueItem]) -> list[QueueItem]:
     return sorted(items, key=lambda item: item.updated_at, reverse=True)
+
+
+def _review_order(items: list[QueueItem]) -> list[QueueItem]:
+    """Pending reviews first, then finished ones; newest first inside each group."""
+    pending = [item for item in items if not item.my_review_done]
+    done = [item for item in items if item.my_review_done]
+    return _sort_items(pending) + _sort_items(done)
 
 
 def _query(username: str, *, include_all: bool, **params: str) -> str:
@@ -143,10 +202,13 @@ def _graphql_review_requested(
     hostname: str,
     limit: int,
     include_all: bool,
+    include_reviewed: bool = False,
 ) -> tuple[list[dict[str, Any]] | None, str | None]:
     if not which("glab"):
         return None, "glab not found on PATH"
 
+    review_state = "" if include_reviewed else "reviewState: UNREVIEWED"
+    query = _GQL_REVIEW_REQUESTED % {"review_state": review_state}
     pool = min(limit * 3, 100)
     args = [
         "glab",
@@ -155,7 +217,7 @@ def _graphql_review_requested(
         "--hostname",
         hostname,
         "-f",
-        f"query={_GQL_REVIEW_REQUESTED}",
+        f"query={query}",
         "-F",
         f"first={pool}",
     ]
@@ -185,11 +247,12 @@ def _partition_review_items(
     *,
     limit: int,
     include_drafts: bool,
+    username: str | None = None,
 ) -> CategoryResult:
     items: list[QueueItem] = []
     drafts: list[QueueItem] = []
     for row in rows:
-        item = _item_from_mr(row)
+        item = _item_from_mr(row, username=username)
         if item.draft or item.work_in_progress:
             drafts.append(item)
             if include_drafts:
@@ -197,8 +260,8 @@ def _partition_review_items(
         else:
             items.append(item)
     return CategoryResult(
-        items=_sort_items(items)[:limit],
-        drafts=_sort_items(drafts),
+        items=_review_order(items)[:limit],
+        drafts=_review_order(drafts),
     )
 
 
@@ -209,14 +272,20 @@ def fetch_review_requested(
     limit: int,
     include_drafts: bool,
     include_all: bool,
+    include_reviewed: bool = False,
 ) -> CategoryResult:
-    rows, err = _graphql_review_requested(
-        hostname=hostname,
-        limit=limit,
-        include_all=include_all,
-    )
+    graphql_kwargs: dict[str, Any] = {
+        "hostname": hostname,
+        "limit": limit,
+        "include_all": include_all,
+    }
+    if include_reviewed:
+        graphql_kwargs["include_reviewed"] = True
+    rows, err = _graphql_review_requested(**graphql_kwargs)
     if rows is not None:
-        return _partition_review_items(rows, limit=limit, include_drafts=include_drafts)
+        return _partition_review_items(
+            rows, limit=limit, include_drafts=include_drafts, username=username
+        )
 
     pool = min(limit * 3, 100)
     path = _query(username, include_all=include_all, reviewer_username=username, per_page=str(pool))
@@ -235,9 +304,15 @@ def fetch_review_requested(
             hostname=hostname,
         )
         if approved is True:
-            continue
+            if not include_reviewed:
+                continue
+            row = {**row, "_my_review": "approved"}
+        elif approved is False:
+            row = {**row, "_my_review": "pending"}
         pending.append(row)
-    return _partition_review_items(pending, limit=limit, include_drafts=include_drafts)
+    return _partition_review_items(
+        pending, limit=limit, include_drafts=include_drafts, username=username
+    )
 
 
 def fetch_authored_changes_requested(
@@ -378,6 +453,7 @@ def fetch_gitlab(
     include_drafts: bool,
     clones: list[tuple[str, Any, Any]],
     include_all: bool,
+    include_reviewed: bool = False,
 ) -> dict[str, Any]:
     username, user_err = _resolve_username(gitlab_host)
     host: dict[str, Any] = {
@@ -416,6 +492,7 @@ def fetch_gitlab(
             limit=gitlab_limit,
             include_drafts=include_drafts,
             include_all=include_all,
+            include_reviewed=include_reviewed,
         ),
         "authored_changes_requested": lambda: fetch_authored_changes_requested(
             username=username,

@@ -85,6 +85,7 @@ def _run(args: argparse.Namespace) -> int:
         gitlab_host=args.gitlab_host,
         dirs=args.dirs or None,
         include_all=args.all,
+        include_reviewed=args.include_reviewed,
     )
 
     if result.get("ok") is False:
@@ -156,6 +157,11 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=config.default_include_all(),
         help="include closed and merged PRs/MRs in addition to open",
+    )
+    parser.add_argument(
+        "--include-reviewed",
+        action="store_true",
+        help="also list open PRs/MRs where my review is already done (review_requested)",
     )
     parser.add_argument("--json", action="store_true", help="emit JSON on stdout")
     parser.add_argument("-q", "--quiet", action="store_true", help="suppress human report")

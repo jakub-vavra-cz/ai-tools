@@ -20,6 +20,7 @@ def queue_fetch(
     gitlab_host: str | None = None,
     dirs: list[str] | None = None,
     include_all: bool = False,
+    include_reviewed: bool = False,
 ) -> dict[str, Any]:
     try:
         resolved_categories = normalize_categories(categories)
@@ -40,6 +41,7 @@ def queue_fetch(
         "git_path": config.git_base_path(),
         "categories": resolved_categories,
         "include_all": include_all,
+        "include_reviewed": include_reviewed,
         "errors": [],
     }
 
@@ -52,6 +54,7 @@ def queue_fetch(
                 github_limit=gh_limit,
                 clones=clones,
                 include_all=include_all,
+                include_reviewed=include_reviewed,
             )
         if "gitlab" in resolved_hosts:
             futures["gitlab"] = pool.submit(
@@ -62,6 +65,7 @@ def queue_fetch(
                 include_drafts=drafts,
                 clones=clones,
                 include_all=include_all,
+                include_reviewed=include_reviewed,
             )
         for name, future in futures.items():
             response[name] = future.result()

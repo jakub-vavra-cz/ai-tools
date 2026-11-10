@@ -14,6 +14,19 @@ def print_json(data: dict[str, Any], *, out: TextIO = sys.stdout) -> None:
     print(file=out)
 
 
+def _item_suffix(item: dict[str, Any]) -> str:
+    """Trailing `[review: ...]` and `{labels}` annotations for a queue row."""
+    parts: list[str] = []
+    review = item.get("my_review")
+    if review:
+        mark = "done" if item.get("my_review_done") else "todo"
+        parts.append(f"[review {mark}: {review}]")
+    labels = item.get("labels") or []
+    if labels:
+        parts.append("{" + ", ".join(labels) + "}")
+    return "  " + " ".join(parts) if parts else ""
+
+
 def print_queue(result: dict[str, Any], *, out: TextIO = sys.stdout, quiet: bool = False) -> None:
     if result.get("ok") is False:
         if not quiet:
@@ -37,7 +50,8 @@ def print_queue(result: dict[str, Any], *, out: TextIO = sys.stdout, quiet: bool
                     state = item.get("state")
                     state_part = f"  [{state}]" if include_all and state else ""
                     print(
-                        f"    {item['ref']}{state_part}  {item['title']}  {item['url']}",
+                        f"    {item['ref']}{state_part}  {item['title']}  {item['url']}"
+                        f"{_item_suffix(item)}",
                         file=out,
                     )
             else:
@@ -47,7 +61,10 @@ def print_queue(result: dict[str, Any], *, out: TextIO = sys.stdout, quiet: bool
                 if not items and drafts:
                     print(f"  {host.capitalize()} (drafts only)", file=out)
                     for item in drafts:
-                        print(f"    {item['ref']}  {item['title']}  {item['url']}", file=out)
+                        print(
+                            f"    {item['ref']}  {item['title']}  {item['url']}{_item_suffix(item)}",
+                            file=out,
+                        )
 
 
 def print_done(result: dict[str, Any], *, out: TextIO = sys.stdout, quiet: bool = False) -> None:

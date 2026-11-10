@@ -37,6 +37,8 @@ Or copy [`ai-tools.env.example`](../ai-tools.env.example) and fill real values.
 | `idmci-rerun-failed` | `clean-twd` + optional overlay + re-run only failed pytest tests via `te` |
 | `check-ansible` | yamllint + multi-stack ansible syntax-check / ansible-lint (writing-ansible) |
 | `check-python` | Read-only Python lint/format checks (ruff, flake8, black, isort) |
+| `check-groovy` | Read-only Groovy / Jenkinsfile lint via npm-groovy-lint (host or podman) |
+| `check-adoc` | docs-idmci AsciiDoc build gate: scoped `make` target, fails on asciidoctor warnings |
 | `dump-polarion-testcase` | Fetch a Polarion testcase via REST API and dump it as `key=value` |
 | `dump-polarion-docs` | Dump Polarion project documents for Confluence migration |
 | `dump-polarion-requirements` | Dump Polarion requirements for Confluence migration |
@@ -169,6 +171,51 @@ check-ansible path.yml --extra-ansible-version 8.7.0 --extra-python 3.12
 
 Exit `0` when all non-skipped checks pass; `1` on lint/syntax/deprecation
 failure; `2` on bad arguments / missing paths.
+
+### check-groovy
+
+Runs `npm-groovy-lint` (read-only, no `--fix`) on Groovy / Jenkinsfile files
+(`*.groovy`, `*.gvy`, `*.gradle`, `Jenkinsfile*`), mirroring the
+`groovylint_check` CI job and pre-commit hook of `idm-jenkins` /
+`idm-jenkins-libs`. The lint root is the nearest dir with a `.groovylintrc*`
+(or `--root`), so the repo config applies.
+
+Runner: host `npm-groovy-lint` when on `PATH`; otherwise podman with
+`docker.io/library/node:22-bookworm` (JRE installed via apt, then
+`npm install -g npm-groovy-lint`). CI's `quay.io/idmops/node:18` is not used:
+it is Debian 11 (EOL apt, no JRE) and too old a Node for current releases.
+With neither available the check is reported `SKIP` (does not fail).
+
+```bash
+check-groovy vars/foo.groovy jenkinsfile/Jenkinsfile
+check-groovy vars/foo.groovy --root ~/git/@REVIEWS/idm-jenkins-libs_mr12 --json
+check-groovy vars/foo.groovy --lint-version 19.0.1 --image docker.io/library/node:22-bookworm
+```
+
+Exit `0` clean or skipped; `1` findings; `2` bad arguments.
+
+### check-adoc
+
+Runs the [writing-adoc](../skills/writing-adoc/SKILL.md) build gate for
+docs-idmci-style trees: finds the docs root (`Makefile` with `user_docs` /
+`maintainer_docs` + `macros/source-url.rb`), picks a scoped target
+(`maintainer_docs/` → `make maintainer_docs`, `user_docs/` → `make user_docs`,
+otherwise `make all`), runs `make clean` then the target, and **fails on a
+non-zero exit or any `WARNING:` / `missing attribute` in the output**
+(CI uses `--failure-level=info`). Uses host `asciidoctor` + `make`, else podman
+with `quay.io/idmops/docs-idmci-base:latest`, else reports `SKIP`.
+
+```bash
+check-adoc maintainer_docs/designs/foo.adoc
+check-adoc user_docs/a.adoc index/b.adoc --target all --json
+check-adoc page.adoc --root ~/git/idmcidoc-fork --no-clean -q
+```
+
+The build writes `html/` under the docs root; use it on disposable review
+clones or a fork you own.
+
+Exit `0` clean or skipped; `1` build failure / warnings; `2` bad arguments or
+no docs root found.
 
 ### check-python
 
@@ -515,8 +562,10 @@ Orchestrates the [review-changes](../skills/review-changes/SKILL.md) mechanical
 workflow:
 
 1. ``clone-review`` — checkout under ``~/git/@REVIEWS``
-2. Lint changed ``*.py`` with ``check-python`` and Ansible ``*.yml``/``*.yaml``
-   with ``check-ansible`` (paths missing at HEAD — deleted files — are skipped)
+2. Lint changed ``*.py`` with ``check-python``, Ansible ``*.yml``/``*.yaml``
+   with ``check-ansible``, Groovy/Jenkinsfile with ``check-groovy``, and
+   ``*.adoc`` with ``check-adoc`` (paths missing at HEAD — deleted files — are
+   skipped; ``*.adoc`` outside a docs-idmci tree is skipped)
 3. Optional ``cleanup-review`` when ``--cleanup`` is set
 
 Code-quality / docstring review is still for the agent after linter output.

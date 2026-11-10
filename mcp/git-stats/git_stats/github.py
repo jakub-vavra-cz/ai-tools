@@ -11,7 +11,7 @@ from git_stats import config
 from git_stats.cli_util import run_cmd, run_json_cmd, which
 from git_stats.models import CategoryResult, QueueItem
 
-_SEARCH_JSON = "number,title,url,updatedAt,isDraft,repository,state"
+_SEARCH_JSON = "number,title,url,updatedAt,isDraft,repository,state,labels"
 
 _GQL_SEARCH_PRS = """
 query($q: String!, $n: Int!) {
@@ -25,7 +25,12 @@ query($q: String!, $n: Int!) {
         isDraft
         state
         repository { nameWithOwner }
-        reviewRequests(first: 1) { totalCount }
+        labels(first: 20) { nodes { name } }
+        reviewRequests(first: 20) {
+          totalCount
+          nodes { requestedReviewer { ... on User { login } ... on Team { slug } } }
+        }
+        latestReviews(first: 50) { nodes { state author { login } } }
       }
     }
   }
@@ -66,7 +71,47 @@ def _item_state(raw: dict[str, Any], *, rest: bool = False) -> str | None:
     return str(state).lower() if state else None
 
 
-def _item_from_search(raw: dict[str, Any], *, rest: bool = False) -> QueueItem:
+def _labels_from(raw: dict[str, Any]) -> list[str]:
+    """Label names from GraphQL nodes, REST/gh dict lists, or plain strings."""
+    labels = raw.get("labels")
+    if isinstance(labels, dict):
+        labels = labels.get("nodes")
+    if not isinstance(labels, list):
+        return []
+    names: list[str] = []
+    for label in labels:
+        name = label.get("name") if isinstance(label, dict) else label
+        if name:
+            names.append(str(name))
+    return names
+
+
+def _my_review_state(raw: dict[str, Any], login: str | None) -> str | None:
+    """Classify my review of a GraphQL PR node; None when GraphQL data is absent."""
+    if not login or ("reviewRequests" not in raw and "latestReviews" not in raw):
+        return None
+    me = login.lower()
+    requests = (raw.get("reviewRequests") or {}).get("nodes") or []
+    for request in requests:
+        reviewer = (request or {}).get("requestedReviewer") or {}
+        if str(reviewer.get("login") or "").lower() == me:
+            return "pending"  # requested (again): any older verdict is stale
+    reviews = (raw.get("latestReviews") or {}).get("nodes") or []
+    for review in reviews:
+        author = (review or {}).get("author") or {}
+        if str(author.get("login") or "").lower() == me:
+            state = str(review.get("state") or "").lower()
+            if state in {"approved", "changes_requested", "commented", "dismissed"}:
+                return state
+    return "pending"
+
+
+def _item_from_search(
+    raw: dict[str, Any],
+    *,
+    rest: bool = False,
+    login: str | None = None,
+) -> QueueItem:
     repo = _repo_name(raw)
     number = int(raw.get("number") or 0)
     ref = f"{repo}#{number}" if repo else f"#{number}"
@@ -79,6 +124,8 @@ def _item_from_search(raw: dict[str, Any], *, rest: bool = False) -> QueueItem:
         repository=repo or None,
         number=number or None,
         state=_item_state(raw, rest=rest),
+        labels=_labels_from(raw),
+        my_review=_my_review_state(raw, login),
     )
 
 
@@ -279,7 +326,54 @@ def _graphql_search_pull_requests(
     return [node for node in nodes if isinstance(node, dict)], None
 
 
-def fetch_review_requested(*, limit: int, include_all: bool) -> CategoryResult:
+def _review_order(items: list[QueueItem]) -> list[QueueItem]:
+    """Pending reviews first, then finished ones; newest first inside each group."""
+    pending = [item for item in items if not item.my_review_done]
+    done = [item for item in items if item.my_review_done]
+    return _sort_items(pending) + _sort_items(done)
+
+
+def _graphql_review_items(
+    *,
+    login: str,
+    limit: int,
+    include_all: bool,
+    include_reviewed: bool,
+) -> tuple[list[QueueItem] | None, str | None]:
+    open_q = _open_qualifier(include_all)
+    queries = [f"is:pr {open_q}review-requested:{login}".strip()]
+    if include_reviewed:
+        queries.append(f"is:pr {open_q}reviewed-by:{login} -author:{login}".strip())
+    merged: dict[str, QueueItem] = {}
+    for query in queries:
+        rows, err = _graphql_search_pull_requests(search_query=query, limit=min(limit * 3, 100))
+        if rows is None:
+            return None, err
+        for row in rows:
+            item = _item_from_search(row, login=login)
+            # first query wins: it carries the pending request
+            merged.setdefault(item.url, item)
+    return _review_order(list(merged.values()))[:limit], None
+
+
+def fetch_review_requested(
+    *,
+    limit: int,
+    include_all: bool,
+    include_reviewed: bool = False,
+) -> CategoryResult:
+    login = _resolve_username()
+    if login:
+        items, _err = _graphql_review_items(
+            login=login,
+            limit=limit,
+            include_all=include_all,
+            include_reviewed=include_reviewed,
+        )
+        if items is not None:
+            return CategoryResult(items=items)
+
+    # fallback: gh search / REST; no per-reviewer state available
     open_q = _open_qualifier(include_all)
     rows, source, err = _gh_search(
         search_args=["--review-requested=@me"],
@@ -400,10 +494,13 @@ def fetch_github(
     github_limit: int,
     clones: list[tuple[str, Any, Any]],
     include_all: bool,
+    include_reviewed: bool = False,
 ) -> dict[str, Any]:
     fetchers = {
         "review_requested": lambda: fetch_review_requested(
-            limit=github_limit, include_all=include_all
+            limit=github_limit,
+            include_all=include_all,
+            include_reviewed=include_reviewed,
         ),
         "authored_changes_requested": lambda: fetch_authored_changes_requested(
             limit=github_limit, include_all=include_all

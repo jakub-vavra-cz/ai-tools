@@ -17,11 +17,14 @@ git-stats                          # all categories
 git-stats reviews                  # agenda §2 shorthand
 git-stats authored                 # both authored categories
 git-stats reviews github --json    # GitHub only
+git-stats reviews --include-reviewed  # also PRs/MRs where my review is done
 git-stats reviews --all --json     # include closed/merged
 git-stats done                     # today's GitHub/GitLab updates
 git-stats done --date 2026-07-01 --json
 git-stats --dir sssd-fork-master   # limit repo-scan fallback to one GIT_PATH child
 ```
+
+Review rows show labels (`{a, b}`) and my review state (`[review todo: pending]`, `[review done: approved]`). Without `--include-reviewed` only pending reviews are listed; with it, open PRs/MRs already reviewed by you follow the pending ones. JSON items carry `labels`, `my_review` and `my_review_done`.
 
 Per-repo fallbacks scan top-level git directories under `GIT_PATH` and infer GitHub vs GitLab from `origin` / `upstream` remote URLs.
 

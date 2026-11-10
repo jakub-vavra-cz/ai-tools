@@ -11,10 +11,18 @@ from typing import Sequence
 
 import click
 
+from ai_tools.check_adoc import CheckReport as AdocCheckReport
+from ai_tools.check_adoc import check_adoc, find_docs_root
+from ai_tools.check_adoc import format_report as format_adoc_report
 from ai_tools.check_ansible import CheckReport as AnsibleCheckReport
-from ai_tools.check_ansible import check_ansible, format_report as format_ansible_report
+from ai_tools.check_ansible import check_ansible
+from ai_tools.check_ansible import format_report as format_ansible_report
+from ai_tools.check_groovy import CheckReport as GroovyCheckReport
+from ai_tools.check_groovy import check_groovy, is_groovy_path
+from ai_tools.check_groovy import format_report as format_groovy_report
 from ai_tools.check_python import CheckReport as PythonCheckReport
-from ai_tools.check_python import check_python, format_report as format_python_report
+from ai_tools.check_python import check_python
+from ai_tools.check_python import format_report as format_python_report
 from ai_tools.cleanup_review import CleanupResult, cleanup_paths
 from ai_tools.clone_review import (
     CloneReviewError,
@@ -40,12 +48,14 @@ class ReviewPrReport:
     diff_patch: str
     python: PythonCheckReport | None = None
     ansible: AnsibleCheckReport | None = None
+    groovy: GroovyCheckReport | None = None
+    adoc: AdocCheckReport | None = None
     skipped_lint: list[str] = field(default_factory=list)
     cleanup: CleanupResult | None = None
 
     @property
     def lint_ok(self) -> bool:
-        reports = [r for r in (self.python, self.ansible) if r is not None]
+        reports = [r for r in (self.python, self.ansible, self.groovy, self.adoc) if r is not None]
         if not reports:
             return True
         return all(r.ok for r in reports)
@@ -69,6 +79,10 @@ class ReviewPrReport:
             data["python"] = self.python.to_dict()
         if self.ansible is not None:
             data["ansible"] = self.ansible.to_dict()
+        if self.groovy is not None:
+            data["groovy"] = self.groovy.to_dict()
+        if self.adoc is not None:
+            data["adoc"] = self.adoc.to_dict()
         if self.cleanup is not None:
             data["cleanup"] = self.cleanup.to_dict()
         return data
@@ -78,23 +92,32 @@ def is_ansible_yaml_path(path: str) -> bool:
     return bool(ANSIBLE_PATH_RE.search(path.replace("\\", "/")))
 
 
-def classify_changed_files(files: list[str]) -> tuple[list[str], list[str], list[str]]:
-    python_files: list[str] = []
-    ansible_files: list[str] = []
-    skipped: list[str] = []
+@dataclass
+class LintTargets:
+    """Changed files grouped by linter."""
 
+    python: list[str] = field(default_factory=list)
+    ansible: list[str] = field(default_factory=list)
+    groovy: list[str] = field(default_factory=list)
+    adoc: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+
+
+def classify_changed_files(files: list[str]) -> LintTargets:
+    """Route each changed path to its linter; the rest are skipped."""
+    targets = LintTargets()
     for rel in files:
         if rel.endswith(".py"):
-            python_files.append(rel)
-        elif rel.endswith((".yml", ".yaml")):
-            if is_ansible_yaml_path(rel):
-                ansible_files.append(rel)
-            else:
-                skipped.append(rel)
+            targets.python.append(rel)
+        elif rel.endswith(".adoc"):
+            targets.adoc.append(rel)
+        elif is_groovy_path(rel):
+            targets.groovy.append(rel)
+        elif rel.endswith((".yml", ".yaml")) and is_ansible_yaml_path(rel):
+            targets.ansible.append(rel)
         else:
-            skipped.append(rel)
-
-    return python_files, ansible_files, skipped
+            targets.skipped.append(rel)
+    return targets
 
 
 def partition_existing_files(
@@ -133,7 +156,7 @@ def run_review(
     cleanup: bool = False,
     cleanup_dry_run: bool = False,
 ) -> ReviewPrReport:
-    """Clone a PR/MR, lint changed Python/Ansible files, optionally clean up."""
+    """Clone a PR/MR, lint changed Python/Ansible/Groovy/AsciiDoc files."""
     checkout = prepare_review(
         reference,
         reviews_root=reviews_root,
@@ -154,6 +177,8 @@ def run_review(
 
     python_report: PythonCheckReport | None = None
     ansible_report: AnsibleCheckReport | None = None
+    groovy_report: GroovyCheckReport | None = None
+    adoc_report: AdocCheckReport | None = None
     skipped_lint: list[str] = []
 
     if not skip_lint:
@@ -162,16 +187,33 @@ def run_review(
             clone_path,
             checkout.changed_files,
         )
-        python_files, ansible_files, skipped_lint = classify_changed_files(present)
-        skipped_lint = deleted + skipped_lint
+        targets = classify_changed_files(present)
+        skipped_lint = deleted + targets.skipped
 
-        if python_files:
-            py_paths = [clone_path / rel for rel in python_files]
+        if targets.python:
+            py_paths = [clone_path / rel for rel in targets.python]
             python_report = check_python(py_paths, python_root=clone_path)
 
-        if ansible_files:
-            yaml_paths = [clone_path / rel for rel in ansible_files]
+        if targets.ansible:
+            yaml_paths = [clone_path / rel for rel in targets.ansible]
             ansible_report = check_ansible(yaml_paths)
+
+        if targets.groovy:
+            groovy_paths = [clone_path / rel for rel in targets.groovy]
+            # Clone root holds the repo .groovylintrc.json.
+            groovy_report = check_groovy(groovy_paths, groovy_root=clone_path)
+
+        if targets.adoc:
+            adoc_paths = [clone_path / rel for rel in targets.adoc]
+            docs_root = find_docs_root(adoc_paths[0], stop=clone_path)
+            if docs_root is None:
+                # Not a docs-idmci tree; nothing to build.
+                skipped_lint.extend(targets.adoc)
+            else:
+                inside = [p for p in adoc_paths if docs_root in p.resolve().parents]
+                outside = [p for p in adoc_paths if p not in inside]
+                skipped_lint.extend(p.relative_to(clone_path).as_posix() for p in outside)
+                adoc_report = check_adoc(inside, docs_root=docs_root)
 
     cleanup_result: CleanupResult | None = None
     if cleanup:
@@ -186,6 +228,8 @@ def run_review(
         diff_patch=diff_patch,
         python=python_report,
         ansible=ansible_report,
+        groovy=groovy_report,
+        adoc=adoc_report,
         skipped_lint=skipped_lint,
         cleanup=cleanup_result,
     )
@@ -239,6 +283,16 @@ def format_report(
         lines.append("")
         lines.append("=== ansible ===")
         lines.append(format_ansible_report(report.ansible, quiet=quiet).rstrip())
+
+    if report.groovy is not None:
+        lines.append("")
+        lines.append("=== groovy ===")
+        lines.append(format_groovy_report(report.groovy, quiet=quiet).rstrip())
+
+    if report.adoc is not None:
+        lines.append("")
+        lines.append("=== adoc ===")
+        lines.append(format_adoc_report(report.adoc, quiet=quiet).rstrip())
 
     if include_diff and report.diff_patch:
         lines.append("")
@@ -341,8 +395,8 @@ def cli(
 
     REFERENCE is a PR/MR URL, or shorthand owner/repo#N / group/proj!N.
 
-    Steps: clone-review → lint changed Python/Ansible files present at HEAD
-    (deleted paths are skipped) → optional cleanup.
+    Steps: clone-review → lint changed Python / Ansible / Groovy (Jenkinsfile) /
+    AsciiDoc files present at HEAD (deleted paths are skipped) → optional cleanup.
     Code-quality evaluation remains for the agent after linter output.
     """
     try:
