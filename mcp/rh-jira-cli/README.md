@@ -101,7 +101,7 @@ jira-cli show PROJ-123 --compact
 jira-cli show PROJ-123 --brief              # JSON: fields renamed via ``names``, ``names`` omitted, empties stripped
 ```
 
-**Agenda** — my unfinished sprint tickets. Resolves the **active** sprint automatically (default name pattern `*IDM-SSSD*` in project **IDM**, board **rhel-idm-sssd** when ambiguous). Same user roles as **`list-mine`**. Line output includes a **role** column (`Assignee`, `Developer`, `Contributor`, `QA Contact`, `Doc Contact`; comma-separated when you hold several). When **Git Pull Request** is set, an extra tab column with the MR/PR URL (or dev-status summary) is appended. Issues are grouped into **In Progress**, **Other open**, and **Contributor** (any ticket where you are a Contributor appears only in the last section).
+**Agenda** — my unfinished sprint tickets. Resolves the **active** sprint automatically (default name pattern `*IDM-SSSD-CORE*` in project **IDM**, board **rhel-idm-sssd-core** when ambiguous). Same user roles as **`list-mine`**. Line output includes a **role** column (`Assignee`, `Developer`, `Contributor`, `QA Contact`, `Doc Contact`; comma-separated when you hold several). When **Git Pull Request** is set, an extra tab column with the MR/PR URL (or dev-status summary) is appended. Issues are grouped into **In Progress**, **Other open**, and **Contributor** (any ticket where you are a Contributor appears only in the last section).
 
 ```bash
 jira-cli agenda

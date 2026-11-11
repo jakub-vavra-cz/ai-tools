@@ -22,8 +22,8 @@ from jira_cli.jql import jql_quote
 from jira_cli.sprint_listing import fetch_project_sprint_rows
 
 DEFAULT_SPRINT_PROJECT = "IDM"
-DEFAULT_SPRINT_PATTERN = "*IDM-SSSD*"
-DEFAULT_PREFERRED_BOARD = "rhel-idm-sssd"
+DEFAULT_SPRINT_PATTERN = "*IDM-SSSD-CORE*"
+DEFAULT_PREFERRED_BOARD = "rhel-idm-sssd-core"
 _IN_PROGRESS_STATUS = "In Progress"
 
 _ROLE_ASSIGNEE = "Assignee"

@@ -30,7 +30,7 @@ One call resolves the active sprint to exclude, lists your backlog issues, parti
 }
 ```
 
-Defaults (override only when the user asks): `sprint_pattern` `*IDM-SSSD*`, `sprint_project` `IDM`, `preferred_board` `rhel-idm-sssd`, `max_results` 100, `show_story_points` true, `include_future_sprints` true.
+Defaults (override only when the user asks): `sprint_pattern` `*IDM-SSSD-CORE*`, `sprint_project` `IDM`, `preferred_board` `rhel-idm-sssd-core`, `max_results` 100, `show_story_points` true, `include_future_sprints` true.
 
 Optional overrides:
 

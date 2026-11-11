@@ -137,7 +137,7 @@ One call resolves the active SSSD sprint, lists your unfinished issues, partitio
 }
 ```
 
-Defaults (override only when the user asks): `sprint_pattern` `*IDM-SSSD*`, `sprint_project` `IDM`, `preferred_board` `rhel-idm-sssd`, `max_results` 50.
+Defaults (override only when the user asks): `sprint_pattern` `*IDM-SSSD-CORE*`, `sprint_project` `IDM`, `preferred_board` `rhel-idm-sssd-core`, `max_results` 50.
 
 Optional overrides: `sprint` (id or name), `sprint_pattern`, `sprint_project`, `preferred_board`, `show_story_points`.
 

@@ -148,9 +148,9 @@ See [reference.md](reference.md) for IDM/RHEL transition maps and Closed-field r
 My unfinished sprint tickets (same as `jira-cli agenda --json`).
 
 - Optional: **`sprint`** — sprint id or name; default resolves active sprint via pattern.
-- Optional: **`sprint_pattern`** — glob for sprint name (default `*IDM-SSSD*`).
+- Optional: **`sprint_pattern`** — glob for sprint name (default `*IDM-SSSD-CORE*`).
 - Optional: **`sprint_project`** — project key for sprint lookup (default `IDM`).
-- Optional: **`preferred_board`** — board name hint (default `rhel-idm-sssd`).
+- Optional: **`preferred_board`** — board name hint (default `rhel-idm-sssd-core`).
 - Optional: **`refresh_sprint_cache`**, **`max_results`**, **`show_story_points`**.
 
 Returns `sections`, `issues` (with `my_roles`, optional `git_pull_request`), sprint metadata, and JQL.
@@ -161,7 +161,7 @@ Returns `sections`, `issues` (with `my_roles`, optional `git_pull_request`), spr
 
 My backlog tickets not in the active sprint (same as `jira-cli backlog --json`).
 
-- Optional: **`sprint`**, **`sprint_pattern`**, **`sprint_project`**, **`preferred_board`** — same as `jira_agenda` (defaults: active *IDM-SSSD* sprint in project IDM).
+- Optional: **`sprint`**, **`sprint_pattern`**, **`sprint_project`**, **`preferred_board`** — same as `jira_agenda` (defaults: active *IDM-SSSD-CORE* sprint in project IDM).
 - Optional: **`refresh_sprint_cache`**, **`max_results`** (default 100), **`show_story_points`** (default true), **`include_future_sprints`** (default true).
 
 Returns issues assigned to or reported by the current user in New, Refinement, or Backlog status, grouped in `sections`, with per-issue `sprint`, `story_points` totals, and `future_sprints` for planning.

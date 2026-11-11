@@ -236,7 +236,7 @@ def main() -> None:
         """
         My unfinished sprint tickets (same as ``jira-cli agenda --json``).
 
-        Resolves the active sprint by default (pattern *IDM-SSSD* in project IDM).
+        Resolves the active sprint by default (pattern *IDM-SSSD-CORE* in project IDM).
         Returns sprint metadata, JQL, sections (in_progress, other_open, contributor),
         and issues with my_roles and optional git_pull_request.
         """
@@ -265,7 +265,7 @@ def main() -> None:
         My backlog tickets (same as ``jira-cli backlog --json``).
 
         Issues assigned to or created by the current user in New, Refinement, or Backlog
-        status that are not in the active sprint (default: *IDM-SSSD* in project IDM).
+        status that are not in the active sprint (default: *IDM-SSSD-CORE* in project IDM).
         Returns sprint metadata, JQL, status sections, story point totals, and future sprints.
         """
         return get_svc().backlog(

@@ -1292,7 +1292,7 @@ def build_parser() -> argparse.ArgumentParser:
         "agenda",
         help=(
             "My unfinished issues in the current sprint "
-            "(default: active sprint matching *IDM-SSSD* in project IDM)"
+            "(default: active sprint matching *IDM-SSSD-CORE* in project IDM)"
         ),
     )
     pa.add_argument("--max-results", type=int, default=50, help="Page size (default 50)")
@@ -1353,7 +1353,7 @@ def build_parser() -> argparse.ArgumentParser:
         "backlog",
         help=(
             "My backlog issues (assignee or reporter) in New/Refinement/Backlog "
-            "not in the current sprint (default: active sprint matching *IDM-SSSD* in project IDM)"
+            "not in the current sprint (default: active sprint matching *IDM-SSSD-CORE* in project IDM)"
         ),
     )
     pb.add_argument("--max-results", type=int, default=100, help="Page size (default 100)")
