@@ -21,7 +21,7 @@ from ai_tools.te_test_summary import (
     failed_nodeids_from_twd,
 )
 
-PHASE_NAME_RE = re.compile(r"^-\s+name:\s+(\S+)\s*$")
+PHASE_NAME_RE = re.compile(r"^[ \t]*-[ \t]+name:[ \t]+(\S+)[ \t]*$")
 PYTESTS_STEP_RE = re.compile(r"^\s+-\s+(pytest-mh|pytests|restraint):\s+")
 ARGS_RE = re.compile(r"^(\s+args:\s+)(.*)$")
 DEFAULT_PHASE = "test"

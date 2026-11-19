@@ -3,7 +3,9 @@ name: create-idmci-metadata
 description: >-
   Authors IdM-CI job metadata YAML (domains, phases, config, TOKEN_ placeholders)
   and wires test-plan jobs. Uses patterns from sssd-qe, sudo, and idm-ci metadata
-  trees plus idmcidoc specs.   For local @TESTRUNS, point pytest-mh:/pytests: and container playbooks at
+  trees plus idmcidoc specs. SSSD system-test (pytest-mh) metadata must be based
+  on the bundled pytest-mh-full-env.yaml reference template — never bend
+  old-type metadata with post-hoc pytest-mh.yaml rewrite scripts.   For local @TESTRUNS, point pytest-mh:/pytests: and container playbooks at
   ~/git/<worktree>/... so te runs tests from the worktree (no sync-twd-tests);
   Jenkins/committed metadata keeps ../sssd/... init-clone paths. Use when
   creating or editing metadata.yaml, test-plan jobs, pytest-mh/pytests/restraint
@@ -24,6 +26,8 @@ Do not invent or hardcode internal hostnames in commands or tracked files.
 User needs a **new or updated job metadata file** (`metadata/**/*.yaml`) or a **test-plan job** entry pointing at it. For **`te` invocation** (phase flags, twd), use [run-te](../run-te/SKILL.md). For **running** metadata locally (@TESTRUNS campaigns), use [run-sssd-tests-idmci](../run-sssd-tests-idmci/SKILL.md). For **running** metadata on Jenkins (`trigger-test-suite-tool`, snippet `IDMCI_METADATA_URL`), use [run-idm-jenkins](../run-idm-jenkins/SKILL.md). For **writing SSSD system tests**, use [write-sssd-system-tests](../write-sssd-system-tests/SKILL.md).
 
 **Local vs Jenkins test paths:** For LTE / `@TESTRUNS`, set `pytest-mh:` or `pytests:` (and optional `git:`) to `~/git/<worktree>/...` so `te` runs tests directly from the developer worktree — init may still clone `../sssd` but that clone is ignored for the test phase; no `sync-twd-tests`. **Do not** use worktree paths in committed `sssd-qe` / `sudo` metadata or Jenkins jobs — CI relies on init clones (`../sssd/...`, `git: ../sssd`).
+
+**SSSD system tests (pytest-mh / sssd-test-framework) — reference template:** base metadata on the bundled **[pytest-mh-full-env.yaml](pytest-mh-full-env.yaml)** (next to this SKILL.md; vendored from sssd-qe `metadata/pytest_mh/`). Copy it and delete hosts you do not need. Never adapt restraint / `pytests:` / other old-style metadata for system tests, and never write post-hoc scripts that rewrite `twd/config/pytest-mh.yaml` to merge or reshape domains (e.g. `~/git/@TESTRUNS/adldaptls13/twd/merge_pytest_mh.py`) — that is a symptom of wrong metadata; author proper pytest-mh metadata from the template instead.
 
 **Authoritative docs** (read before inventing structure):
 
@@ -85,12 +89,14 @@ Match the **test runner** and **topology**, then copy the closest file and edit.
 | Single Linux client | `sudo-fork-master/metadata/upstream_singlehost.yaml` |
 | IPA master + client | `idmci-fork-master/metadata/pytests-example-metadata.yaml` |
 | IPA + AD trust | `sssd-qe-fork/metadata/pytest/pytest-client-ipa-ad.yaml` |
-| Full sssd-ci-containers (client, dns, ldap, ipa, samba, ad, …) | `sssd-qe-fork/metadata/pytest_mh/pytest-mh-full-env.yaml` or `pytest-mh-noSamba.yaml` |
+| Full sssd-ci-containers (client, dns, ldap, ipa, samba, ad, …) | bundled [pytest-mh-full-env.yaml](pytest-mh-full-env.yaml) — delete hosts to trim (upstream sssd-qe also ships `pytest-mh-noSamba.yaml`) |
 | Client + IPA + AD (pytest-mh, no samba) | `sudo-fork-master/metadata/pytest_client_ipa_ad.yaml` |
 | AD forest (multi-domain) | `sssd-qe-fork/metadata/ad_provider/ad_forest.yaml` |
 | Bootc image build | `idmci-fork-master/metadata/infra/bootc-metadata.yaml` |
 
 Canonical minimal templates live in **`idmci-fork-master/metadata/`** (`pytests-example-metadata.yaml`, `restraint-example-metadata.yaml`, `mix-master-replica-metadata.yaml`).
+
+For **SSSD system tests** (`src/tests/system/`, pytest-mh), the reference template is the bundled **[pytest-mh-full-env.yaml](pytest-mh-full-env.yaml)** (next to this SKILL.md, vendored from sssd-qe `metadata/pytest_mh/`) regardless of the host subset you need — copy it, then delete unneeded hosts and prep steps. Its structure is what makes sssd-test-framework work: `config.outputs: [ansible-inventory, pytest-mh]`, the `config.ansible.layout`, and **all hosts in a single `type: sssd` domain** (client, dns, nfs, kdc, ldap, ipa, samba, ad — each with `pytest_mh.conn`), because sssd-test-framework topologies match roles within one domain.
 
 ---
 
@@ -128,6 +134,7 @@ Upstream **reference implementations** and infra jobs — copy playbooks paths f
 
 When using pytest-mh (SSSD/sudo system tests):
 
+0. **Start from the reference template** [pytest-mh-full-env.yaml](pytest-mh-full-env.yaml) (this skill's directory) and trim it. Keep all hosts in **one `type: sssd` domain** — mrack then emits a single pytest-mh domain and sssd-test-framework topologies resolve. Do not split hosts across multiple IdM-CI domains and do not patch the generated `config/pytest-mh.yaml` afterwards.
 1. Set `config.outputs: [ansible-inventory, pytest-mh]` and copy `config.ansible.layout` from `pytest-mh-full-env.yaml` or `pytest_client_ipa_ad.yaml`.
 2. Per host: `hostname`, `group`, `groups: [...]`, `role`, `os`, and `pytest_mh.conn` (and `config` / `artifacts` where needed).
 3. **Init**: `init/testrunner-dir.yaml` + `init/sssd-upstream-pytest.yaml` with `repo` / `branch` (and `repo_loc` if not default).
@@ -284,7 +291,7 @@ Copy this checklist when authoring:
 Task progress:
 - [ ] 1. Classify runner (pytest-mh / pytests / restraint / playbook-only)
 - [ ] 2. List required hosts and domain types (ipa, ad, sssd, ldap)
-- [ ] 3. Copy closest metadata from table above; keep phase/playbook names
+- [ ] 3. Copy closest metadata from table above; keep phase/playbook names (SSSD system tests: start from the bundled `pytest-mh-full-env.yaml` in this skill's directory)
 - [ ] 4. Adjust domains (hosts, os tokens, pytest_mh / restraint_id)
 - [ ] 5. Adjust init repo checkout (repo URL, branch, repo_loc)
 - [ ] 6. Adjust test step path and TOKEN_ placeholders (local @TESTRUNS: `~/git/<worktree>/...`, ignore init clone; Jenkins/CI: `../sssd/...` + `git: ../sssd`)
@@ -334,10 +341,12 @@ Built-in playbooks are in `idmci-fork-master/playbooks/`. Prefer existing names 
 - Forgetting `provision/wait.yaml` after `mrack-up.yaml`.
 - Hard-coding pytest `-k` / importance in metadata instead of `TOKEN_SUITE` + jobs.yaml (harder to reuse).
 - Using `~/git/<worktree>/...` in committed metadata or Jenkins jobs — CI cannot see local worktrees; use `../sssd/...` there. Worktree paths are for `@TESTRUNS` metadata only.
+- Writing a script to rewrite `twd/config/pytest-mh.yaml` after init (merge domains, reorder hosts) so old-type or multi-domain metadata works with system tests — e.g. `~/git/@TESTRUNS/adldaptls13/twd/merge_pytest_mh.py`. Never do this; write pytest-mh metadata from `pytest-mh-full-env.yaml` instead.
+- Splitting pytest-mh hosts across multiple IdM-CI domains — sssd-test-framework matches roles within a single `sssd` domain; extra domains break topology resolution (and tempt the merge-script mistake above).
 - AD host without trailing `-` on random string placeholders (`rnd-ld-5-1-`).
 
 ---
 
 ## Additional reference
 
-For step-type attribute tables, multidomain AD `parent`/`domain_level`, bootc gating metadata, and qualification layout samples, see [reference.md](reference.md).
+For step-type attribute tables, multidomain AD `parent`/`domain_level`, bootc gating metadata, and qualification layout samples, see [reference.md](reference.md). The full SSSD system-test reference template is bundled as [pytest-mh-full-env.yaml](pytest-mh-full-env.yaml).

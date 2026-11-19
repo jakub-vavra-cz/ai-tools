@@ -3,7 +3,9 @@ name: run-sssd-tests-idmci
 description: >-
   Runs SSSD and related multihost tests via IdM-CI: @TESTRUNS campaigns under
   ~/git/@TESTRUNS/<name>/twd, job metadata.yaml, and `te` (see run-te for CLI/phase
-  flags). For provider: aws, requires
+  flags). SSSD system-test (pytest-mh) metadata must be based on the bundled
+  ../create-idmci-metadata/pytest-mh-full-env.yaml template — never bend old-type
+  metadata with post-hoc pytest-mh.yaml rewrite scripts. For provider: aws, requires
   a valid Kerberos TGT and `aws-saml.py --region=us-east-2 --role 099686300931-poweruser
   --sessionduration 14400` before provision. Prefer `~/git/<fork>/...` paths in metadata
   for local WIP (no sync); `sync-twd-tests` only when metadata still points at init
@@ -85,6 +87,8 @@ That playbook creates `twd/config/`, copies SSH keys and mrack config, and **ins
 - **`playbook:`** — Ansible prep/collect/teardown from idm-ci built-ins, init clones (`../sssd-ci-containers/...`), or git forks (`~/git/cont-fork-<topic>/...`, `../../../cont-fork-<topic>/...`)
 
 Adapt from a similar campaign under `~/git/@TESTRUNS/` or from `idm-ci/metadata/pytests-example-metadata.yaml` rather than inventing phase/playbook names.
+
+**SSSD system tests (pytest-mh / sssd-test-framework):** base `metadata.yaml` on the reference template **[pytest-mh-full-env.yaml](../create-idmci-metadata/pytest-mh-full-env.yaml)** (bundled with the [create-idmci-metadata](../create-idmci-metadata/SKILL.md) skill) — copy it into `twd/metadata.yaml` and delete unneeded hosts (e.g. samba). It keeps all hosts in a **single `type: sssd` domain** with `config.outputs: [ansible-inventory, pytest-mh]`, which is what sssd-test-framework topologies need. **Never** adapt restraint / old-style multi-domain metadata with post-hoc scripts that rewrite `twd/config/pytest-mh.yaml` (e.g. `~/git/@TESTRUNS/adldaptls13/twd/merge_pytest_mh.py` merging mrack domains) — if you are tempted to patch the generated pytest-mh config, the metadata is wrong; rewrite it from the template.
 
 ### Layout
 
@@ -225,6 +229,9 @@ te-test-summary --twd . --json
 ```bash
 mkdir -p ~/git/@TESTRUNS/<campaign>/twd
 # Write twd/metadata.yaml (domains + phases) — see idm-ci docs above
+# SSSD system tests: copy the bundled template from the create-idmci-metadata
+# skill dir (pytest-mh-full-env.yaml; single sssd domain, config.outputs pytest-mh)
+# and trim it — never merge_pytest_mh.py-style rewrites
 # Create twd/AGENT-HANDOFF.md from the template in "Agent handoff" above
 # For local WIP: point pytest-mh: and container playbooks at ~/git/<fork>/...
 # (init clones ../sssd, ../sssd-ci-containers can be ignored). Only use
@@ -596,7 +603,7 @@ For @TESTRUNS campaigns, ensure **`twd/AGENT-HANDOFF.md`** reflects the latest p
 
 ## Order of operations
 
-1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](${DOCS_IDMCI_URL}/user_docs/guide.html#_job_metadata_basics)). **Create or read `twd/AGENT-HANDOFF.md`** — if **Provisioned at** is older than ~8 hours, re-provision (`te --upto prep`) instead of debugging stale inventory. If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-2 --role 099686300931-poweruser --sessionduration 14400` before provision. Create/reuse tmux session `<campaign>` and record it in the handoff. Provision with `te --upto prep metadata.yaml` (inside tmux) if hosts are not up; record provision date/time in the handoff. Diagnose prior runs with **`te-test-summary`**, then junit/logs; update failed tests in the handoff.
+1. **@TESTRUNS?** — If multihost / campaign context applies: ensure `~/git/@TESTRUNS/<campaign>/twd/metadata.yaml` exists (create or edit per [job metadata basics](${DOCS_IDMCI_URL}/user_docs/guide.html#_job_metadata_basics); SSSD system tests derive from the bundled `create-idmci-metadata/pytest-mh-full-env.yaml` template, never from merge-script-patched old metadata). **Create or read `twd/AGENT-HANDOFF.md`** — if **Provisioned at** is older than ~8 hours, re-provision (`te --upto prep`) instead of debugging stale inventory. If metadata uses **`provider: aws`**, confirm a valid Kerberos TGT and run `aws-saml.py --region=us-east-2 --role 099686300931-poweruser --sessionduration 14400` before provision. Create/reuse tmux session `<campaign>` and record it in the handoff. Provision with `te --upto prep metadata.yaml` (inside tmux) if hosts are not up; record provision date/time in the handoff. Diagnose prior runs with **`te-test-summary`**, then junit/logs; update failed tests in the handoff.
 2. **Discover** other test entry points (in-repo, then CI).
 3. **Scope** to the user’s change or named test.
 4. **Prepare** — venv, build dir, AWS creds when needed, `te --upto prep` (cloud provision), or local containers as required.

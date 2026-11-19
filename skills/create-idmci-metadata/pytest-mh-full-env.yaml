@@ -1,0 +1,229 @@
+# Reference template for SSSD system-test (pytest-mh / sssd-test-framework) job metadata.
+# Vendored from the sssd-qe repo: metadata/pytest_mh/pytest-mh-full-env.yaml —
+# re-copy from there when the upstream template changes.
+# Usage: copy into ~/git/@TESTRUNS/<campaign>/twd/metadata.yaml (or a sssd-qe metadata
+# tree), then delete hosts / prep steps you do not need. Keep all hosts in the single
+# `type: sssd` domain — sssd-test-framework topologies match roles within one domain.
+# `../sssd/...` and `../sssd-ci-containers/...` paths are twd-relative init clones
+# (CI default); for local WIP point them at your ~/git/<worktree>/... instead.
+config:
+  outputs:
+  - ansible-inventory
+  - pytest-mh
+  ansible:
+    layout:
+      all:
+        vars:
+          user: test
+        children:
+          base:
+            children:
+              base_ground: {}
+          base_ground:
+            children:
+              services: {}
+          services:
+            children:
+              client: {}
+              ipa: {}
+              ldap: {}
+              samba: {}
+              nfs: {}
+              kdc: {}
+              dns: {}
+          dns_server:
+            children:
+              ipa: {}
+              samba: {}
+              ad_root: {}
+          ad:
+            vars:
+              ansible_become: no
+              user: Administrator
+            children:
+              ad_root: {}
+              ad_rootbackup: {}
+              ad_subdomain: {}
+              ad_subsubdomain: {}
+              ad_treedomain: {}
+              ad_member: {}
+
+domains:
+  - name: sssd
+    type: sssd
+    hosts:
+      - name: client.test
+        hostname: client.test
+        group: medium
+        provider: aws
+        groups:
+          - client
+        role: client
+        os: client_os
+        pytest_mh:
+          conn:
+            username: root
+            password: Secret123
+          artifacts:
+            - /etc/sssd/*
+            - /var/log/sssd/*
+
+      - name: dns.test
+        hostname: dns.test
+        group: xsmall
+        provider: aws
+        groups:
+          - dns
+        role: dns
+        os: rhel
+        pytest_mh:
+          conn:
+            username: root
+            password: Secret123
+
+      - name: nfs.test
+        hostname: nfs.test
+        group: xsmall
+        provider: aws
+        groups:
+          - nfs
+        role: nfs
+        os: rhel
+        pytest_mh:
+          conn:
+            username: root
+            password: Secret123
+
+      - name: kdc.test
+        hostname: kdc.test
+        group: xsmall
+        provider: aws
+        groups:
+          - kdc
+        role: kdc
+        os: rhel
+        pytest_mh:
+          conn:
+            username: root
+            password: Secret123
+
+      - name: master.ldap.test
+        hostname: master.ldap.test
+        group: medium
+        provider: aws
+        groups:
+          - ldap
+        role: ldap
+        os: rhel
+        pytest_mh:
+          conn:
+            username: root
+            password: Secret123
+          config:
+            binddn: cn=Directory Manager
+            bindpw: Secret123
+            client:
+              ldap_tls_reqcert: demand
+              ldap_tls_cacert: /var/data/certs/ca.crt
+              dns_discovery_domain: ldap.test
+
+      - name: master.ipa.test
+        hostname: master.ipa.test
+        group: medium
+        provider: aws
+        groups:
+          - ipa
+        role: ipa
+        os: rhel
+        pytest_mh:
+          conn:
+            username: root
+            password: Secret123
+          config:
+            adminpw: Secret123
+            client:
+              ipa_domain: ipa.test
+
+      - name: dc.samba.test
+        hostname: dc.samba.test
+        group: medium
+        provider: aws
+        groups:
+          - samba
+        role: samba
+        os: fedora-42
+        pytest_mh:
+          conn:
+            username: root
+            password: Secret123
+          config:
+            binddn: CN=Administrator,CN=Users,DC=samba,DC=test
+            bindpw: Secret123
+            client:
+              ad_domain: samba.test
+
+      - name: dc-rnd-dl-4-1-.ad-rnd-dl-4-1-.test
+        hostname: dc-rnd-dl-4-1-.ad-rnd-dl-4-1-.test
+        role: ad
+        group: ad_root
+        provider: aws
+        netbios: DC-RND-dl-4-1-
+        host_type: 'windows'
+        os: windows
+        pytest_mh:
+          conn:
+            username: Administrator
+            password: Secret123
+          config:
+            adminpw: Secret123
+            client:
+              ad_domain: ad-rnd-dl-4-1-.test
+
+phases:
+  - name: init
+    steps:
+      - playbook: init/testrunner-dir.yaml
+      - playbook: init/sssd-upstream-pytest.yaml
+        extra_vars:
+          repo: "https://github.com/SSSD/sssd.git"
+          branch: "master"
+          #repo_containers: "https://github.com/sssd/sssd-ci-containers.git"
+          #branch_containers: "master"
+  - name: provision
+    steps:
+      - playbook: provision/mrack-up.yaml
+      - playbook: provision/wait.yaml
+  - name: prep
+    steps:
+      - playbook: prep/redhat-base.yaml
+      - playbook: prep/repos.yaml
+        extra_vars:
+          repos_buildroot: yes
+          repos_buildroot_debug: yes
+      - playbook: prep/set-root-ssh-password.yaml
+      - playbook: prep/prefer-ipv4.yaml
+      - playbook: prep/win-domain-setup.yaml
+      - playbook: prep/win-get-ad-cert.yaml
+      - playbook: prep/sssd-dns.yaml
+        extra_vars:
+          dns_ip_address: "{{ hostvars[groups['dns'][0]]['meta_ip'] }}"
+      - playbook: ../sssd-ci-containers/src/ansible/playbook_vm.yml
+        extra_vars:
+          extended_packageset: no
+          passkey_support: no
+          virt_smarcard: no
+      - playbook: prep/kernel-modules-extra.yaml
+  - name: test
+    steps:
+      - pytest-mh:  ../sssd/src/tests/system/
+        args: "TOKEN_SUITE"
+        name: "TOKEN_NAME"
+  - name: collect
+    steps:
+      - playbook: collect/sssd-logs.yaml
+      - playbook: collect/win-logs.yaml
+      - playbook: teardown/fetch-logs.yaml
+  - name: teardown
+    steps:
+      - playbook: teardown/check-rpm-version.yaml
+      - playbook: teardown/mrack-destroy.yaml
