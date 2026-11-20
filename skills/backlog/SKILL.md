@@ -11,6 +11,8 @@ description: >-
 
 Produce a concise backlog report for estimation and sprint planning. Fetch backlog data and (when useful) future sprints, then assemble the report.
 
+**No subagents:** call `jira_backlog` directly in this conversation. Do **not** delegate any part of this skill to subagents or background agents (Task tool); spawning a subagent is slower than running the call directly.
+
 Related skills: [agenda](../agenda/SKILL.md), [jira-cli-mcp](../jira-cli-mcp/SKILL.md).
 
 ---

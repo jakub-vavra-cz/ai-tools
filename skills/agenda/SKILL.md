@@ -12,6 +12,8 @@ description: >-
 
 Produce a concise daily agenda in three sections. Run all data-gathering steps **in parallel** where possible, then assemble the report.
 
+**No subagents:** call every MCP tool directly in this conversation — "in parallel" means issuing the independent tool calls together in one message. Do **not** delegate any part of this skill to subagents or background agents (Task tool); spawning a subagent is slower than running the calls directly.
+
 
 ## Hostnames (`~/git/ai-tools.env`)
 
